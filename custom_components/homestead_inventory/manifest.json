@@ -1,0 +1,14 @@
+{
+  "domain": "homestead_inventory",
+  "name": "Homestead Inventory",
+  "codeowners": ["@HL-Apprentice"],
+  "config_flow": true,
+  "dependencies": ["http", "frontend"],
+  "documentation": "https://github.com/HL-Apprentice/homestead-inventory#readme",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/HL-Apprentice/homestead-inventory/issues",
+  "loggers": ["custom_components.homestead_inventory"],
+  "requirements": ["Pillow>=10.0.0", "aiosqlite>=0.20.0"],
+  "version": "0.1.0"
+}

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# SQLite databases (never commit user data)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Node / frontend
+frontend/node_modules/
+frontend/.env
+frontend/dist/
+
+# Branding scratch (only the final icon.png + logo.png at repo root ship)
+branding/
+
+# Tooling / OS
+.idea/
+.vscode/
+.DS_Store
+*.log
+*.bak
+*.swp
+.pytest_cache/
+*.tar.gz
+*.zip
