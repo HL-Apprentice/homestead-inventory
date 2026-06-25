@@ -15,7 +15,3 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
-          # 'brands' only matters for HACS DEFAULT-store listing (needs the domain
-          # in the home-assistant/brands repo). This installs fine as a HACS custom
-          # repository, so skip that check. Submit to brands later for default-store.
-          ignore: brands
