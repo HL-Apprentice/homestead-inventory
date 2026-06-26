@@ -176,6 +176,7 @@ export default function OrganizersView({ api }: { api: ApiService }) {
       {showAddItemModal && (
         <AddItemModal
           isOpen={true}
+          api={api}
           onClose={() => setShowAddItemModal(false)}
           onSave={async (itemData) => {
             await addItem.mutateAsync(itemData);

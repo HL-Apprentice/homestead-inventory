@@ -211,6 +211,7 @@ export class ApiService {
     itemData: {
       name: string;
       aliases?: string;
+      barcode?: string | null;
       image?: string;
       quantity?: number | null;
       min_quantity?: number | null;
@@ -225,6 +226,23 @@ export class ApiService {
 
   async updateItem(id: number, data: any): Promise<void> {
     return this.hass.callApi('PATCH', `homestead_inventory/items/${id}`, data);
+  }
+
+  /** Find an item by its stored barcode. Throws if none matches (404). */
+  async findItemByBarcode(code: string): Promise<Item> {
+    const data = await this.hass.callApi<Item>(
+      'GET',
+      `homestead_inventory/by_barcode?code=${encodeURIComponent(code)}`
+    );
+    return { ...data, image: this.getImageUrl(data.image) };
+  }
+
+  /** Optional product-name lookup (only works if enabled in the integration). */
+  async lookupBarcode(code: string): Promise<{ found: boolean; name?: string }> {
+    return this.hass.callApi(
+      'GET',
+      `homestead_inventory/barcode_lookup?code=${encodeURIComponent(code)}`
+    );
   }
 
   async updateItemQuantity(

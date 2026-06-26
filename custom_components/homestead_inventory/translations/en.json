@@ -6,7 +6,8 @@
         "description": "Rooms > Cupboards > Shelves > Organizers > Items",
         "data": {
           "allow_structure_modification": "Allow structure modification",
-          "require_admin": "Restrict access to admin users only (panel and API)"
+          "require_admin": "Restrict access to admin users only (panel and API)",
+          "enable_barcode_lookup": "Enable barcode product lookup (sends scanned barcodes to Open Food Facts)"
         }
       }
     },
@@ -20,7 +21,8 @@
         "title": "Homestead Inventory options",
         "data": {
           "allow_structure_modification": "Allow structure modification",
-          "require_admin": "Restrict access to admin users only (panel and API)"
+          "require_admin": "Restrict access to admin users only (panel and API)",
+          "enable_barcode_lookup": "Enable barcode product lookup (sends scanned barcodes to Open Food Facts)"
         }
       }
     }

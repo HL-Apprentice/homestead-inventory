@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
+import aiohttp
 from aiohttp import web
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from ..const import DOMAIN, EVENT_ITEM_CONSUMED, EVENT_LOW_STOCK
 from ..storage import images as img
 from .base import (
     MAX_ALIASES_LEN,
+    MAX_BARCODE_LEN,
     MAX_NAME_LEN,
     HInvView,
     clean_str,
@@ -17,6 +21,10 @@ from .base import (
     length_error,
     parse_quantity,
 )
+
+# Open Food Facts is a free, public, no-key product database. Only ever called
+# when the operator explicitly enables barcode lookup (off by default).
+_OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,6 +71,7 @@ class ItemsView(HInvView):
         if err := (
             length_error(name, MAX_NAME_LEN, "Name")
             or length_error(data.get("aliases"), MAX_ALIASES_LEN, "Aliases")
+            or length_error(data.get("barcode"), MAX_BARCODE_LEN, "Barcode")
         ):
             return json_error(err)
 
@@ -74,6 +83,7 @@ class ItemsView(HInvView):
         item = {
             "name": name,
             "aliases": data.get("aliases"),
+            "barcode": clean_str(data.get("barcode")) or None,
             "image": data.get("image", "") or "",
             "quantity": quantity,
             "min_quantity": min_quantity,
@@ -104,6 +114,7 @@ class ItemView(HInvView):
         if err := (
             length_error(data.get("name"), MAX_NAME_LEN, "Name")
             or length_error(data.get("aliases"), MAX_ALIASES_LEN, "Aliases")
+            or length_error(data.get("barcode"), MAX_BARCODE_LEN, "Barcode")
         ):
             return json_error(err)
 
@@ -237,13 +248,77 @@ class ConfigView(HInvView):
         entry = self.hass.data.get(DOMAIN, {}).get("entry")
         allow = True
         language = "en"
+        barcode_lookup = False
         if entry is not None:
             allow = entry.options.get("allow_structure_modification", True)
             language = entry.options.get("language", "en")
+            barcode_lookup = entry.options.get("enable_barcode_lookup", False)
         return web.json_response(
             {
                 "allow_structure_modification": allow,
                 "qr_redirect_url": f"homeassistant://navigate/{DOMAIN}" if allow else None,
                 "language": language,
+                "enable_barcode_lookup": barcode_lookup,
             }
         )
+
+
+class ItemByBarcodeView(HInvView):
+    """Find an item by its stored barcode (scan-to-find)."""
+
+    url = f"/api/{DOMAIN}/by_barcode"
+    name = f"api:{DOMAIN}:by_barcode"
+
+    async def get(self, request):
+        code = clean_str(request.query.get("code"))
+        if not code:
+            return json_error("Missing barcode")
+        item = await self.repo.find_item_by_barcode(code)
+        if item is None:
+            return json_error("No item with that barcode", 404)
+        item["image"] = img.build_image_url(
+            self.hass, item.get("image", ""), self.token_id(request)
+        )
+        return web.json_response(item)
+
+
+class BarcodeLookupView(HInvView):
+    """Optional product-name lookup from a barcode via Open Food Facts.
+
+    Off by default; only reachable when the operator enables the
+    'enable_barcode_lookup' option (the one place this integration makes an
+    outbound call). Barcodes are validated as numeric to keep the request safe.
+    """
+
+    url = f"/api/{DOMAIN}/barcode_lookup"
+    name = f"api:{DOMAIN}:barcode_lookup"
+
+    async def get(self, request):
+        entry = self.hass.data.get(DOMAIN, {}).get("entry")
+        if not (entry and entry.options.get("enable_barcode_lookup", False)):
+            return json_error("Barcode lookup is disabled", 403)
+
+        code = clean_str(request.query.get("code"))
+        if not code or not code.isdigit() or len(code) > MAX_BARCODE_LEN:
+            return json_error("Invalid barcode")
+
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(
+                _OFF_URL.format(code=code),
+                params={"fields": "product_name,brands"},
+                timeout=aiohttp.ClientTimeout(total=8),
+            ) as resp:
+                if resp.status != 200:
+                    return web.json_response({"found": False})
+                payload = await resp.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            return json_error("Lookup service unavailable", 504)
+
+        product = payload.get("product") or {}
+        name = (product.get("product_name") or "").strip()
+        brand = (product.get("brands") or "").split(",")[0].strip()
+        if not name:
+            return web.json_response({"found": False})
+        full = f"{brand} {name}".strip() if brand else name
+        return web.json_response({"found": True, "name": full[:MAX_NAME_LEN]})

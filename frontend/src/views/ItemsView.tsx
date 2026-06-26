@@ -78,6 +78,7 @@ export default function ItemsView({ api }: { api: ApiService }) {
       {showAddModal && (
         <AddItemModal
           isOpen={true}
+          api={api}
           onClose={() => setShowAddModal(false)}
           onSave={async (itemData) => {
             await addItem.mutateAsync(itemData);

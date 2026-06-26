@@ -17,6 +17,7 @@ from ..const import DOMAIN
 from ..storage import InventoryRepository
 from ._helpers import (  # noqa: F401  (re-exported for view modules)
     MAX_ALIASES_LEN,
+    MAX_BARCODE_LEN,
     MAX_NAME_LEN,
     REFRESH_TOKEN_KEY,
     clean_str,

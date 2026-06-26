@@ -33,6 +33,7 @@ class HomesteadInventoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Optional("allow_structure_modification", default=True): bool,
                     vol.Optional("require_admin", default=False): bool,
+                    vol.Optional("enable_barcode_lookup", default=False): bool,
                 }
             ),
         )
@@ -59,6 +60,10 @@ class HomesteadInventoryOptionsFlow(config_entries.OptionsFlow):
                     ): bool,
                     vol.Optional(
                         "require_admin", default=opts.get("require_admin", False)
+                    ): bool,
+                    vol.Optional(
+                        "enable_barcode_lookup",
+                        default=opts.get("enable_barcode_lookup", False),
                     ): bool,
                 }
             ),
