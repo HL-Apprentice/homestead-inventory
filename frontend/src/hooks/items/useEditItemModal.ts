@@ -27,6 +27,7 @@ export default function useEditItemModal({
 
   const [name, setName] = useState(item.name);
   const [aliases, setAliases] = useState(item.aliases || '');
+  const [barcode, setBarcode] = useState(item.barcode || '');
   const [preview, setPreview] = useState<string | null>(item.image || null);
   const [file, setFile] = useState<File | null>(null);
   const [track, setTrack] = useState(item.track_quantity);
@@ -90,6 +91,7 @@ export default function useEditItemModal({
       const data: any = {
         name: name.trim(),
         aliases: aliases.trim() || undefined,
+        barcode: barcode.trim() || null,
         track_quantity: track,
         quantity: qty,
         min_quantity: track ? minQuantity : null,
@@ -115,7 +117,7 @@ export default function useEditItemModal({
     } finally {
       setLoading(false);
     }
-  }, [name, aliases, track, quantity, minQuantity, showMove, moveState, file]);
+  }, [name, aliases, barcode, track, quantity, minQuantity, showMove, moveState, file]);
 
   const handleDelete = async () => {
     if (!confirm(`Delete "${item.name}"?`)) return;
@@ -137,6 +139,8 @@ export default function useEditItemModal({
     minQuantity,
     showMove,
     moveState,
+    barcode,
+    setBarcode,
     setName,
     startMove,
     cancelMove,

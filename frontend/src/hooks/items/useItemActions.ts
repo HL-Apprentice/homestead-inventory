@@ -16,6 +16,7 @@ export function useItemActions(api: ApiService, organizerName?: string | null) {
     mutationFn: async (itemData: {
       name: string;
       aliases?: string;
+      barcode?: string | null;
       imageFile?: File | null;
       quantity?: number | null;
       min_quantity?: number | null;
@@ -40,6 +41,7 @@ export function useItemActions(api: ApiService, organizerName?: string | null) {
         {
           name: itemData.name,
           aliases: itemData.aliases,
+          barcode: itemData.barcode,
           image: imagePath,
           quantity: itemData.quantity,
           min_quantity: itemData.min_quantity,

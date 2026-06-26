@@ -35,7 +35,7 @@ stability. See [NOTICE](NOTICE) for attribution.
 | **Upgrades** | Explicit schema versioning + a migration path, so your data survives future changes. |
 | **Image security** | Images are served behind HA auth and handed to the browser as **signed, expiring URLs** (`async_sign_path`) — your access token never appears in an image URL, the DOM, logs, or browser history. |
 | **Uploads** | Size-capped before buffering, validated as real images (Pillow) and re-encoded to JPEG. Malformed payloads are rejected, never stored. |
-| **Privacy** | Fully local. QR codes are generated on-device (no third-party QR service). No outbound calls, no telemetry. |
+| **Privacy** | Local by default — QR codes generated on-device, no telemetry. The only outbound call is the **opt-in** barcode product lookup (off by default). |
 
 ## Features
 
@@ -45,7 +45,25 @@ stability. See [NOTICE](NOTICE) for attribution.
 - **Low-stock events** for automations (notifications, shopping lists, etc.).
 - **QR location labels**: print a QR for a cupboard, stick it on the real one;
   scanning it opens the panel right at that location to add/adjust items.
+- **Barcode support** (v0.2.0): store a barcode per item, scan one with the
+  device camera when adding/editing, and **scan-to-find** an item from the Rooms
+  view. See notes below.
 - Three **sensors**: total items, low stock (with item list), tracked items.
+
+## Barcode scanning
+
+- **Store & scan**: each item has an optional barcode. Type it, or tap **📷 Scan**
+  in the add/edit dialog to read it with the camera.
+- **Scan to find**: the **📷 Scan** button on the Rooms screen reads a barcode and
+  jumps straight to the matching item.
+- **Camera requires a secure context.** Browsers only allow camera access over
+  **HTTPS or localhost** (e.g. Nabu Casa, an HTTPS reverse proxy, or the Companion
+  app). Over plain `http://<ip>:8123` the scanner is unavailable — manual barcode
+  entry still works everywhere.
+- **Optional product lookup** (off by default): enable *"barcode product lookup"*
+  in the integration options to auto-fill an item name from a scanned barcode via
+  [Open Food Facts](https://world.openfoodfacts.org). This is the **only** outbound
+  network call the integration ever makes; leave it off to stay 100% local.
 
 ## Installation
 
