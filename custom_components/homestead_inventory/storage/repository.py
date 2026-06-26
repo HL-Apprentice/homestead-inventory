@@ -30,7 +30,7 @@ import aiosqlite
 
 _LOGGER = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Unique sentinel for "argument not supplied" — avoids colliding with any real
 # value a caller might pass (a magic string could).
@@ -170,6 +170,7 @@ class InventoryRepository:
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 name           TEXT NOT NULL,
                 aliases        TEXT,
+                barcode        TEXT,
                 image          TEXT,
                 shelf_id       INTEGER NOT NULL,
                 organizer_id   INTEGER DEFAULT NULL,
@@ -198,6 +199,8 @@ class InventoryRepository:
         await cur.close()
 
         if row is None:
+            # Fresh DB created at the current schema; ensure derived objects exist.
+            await self._migrate_v2()
             await conn.execute(
                 "INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
@@ -215,12 +218,23 @@ class InventoryRepository:
                 f"Homestead Inventory DB schema v{current} is newer than this "
                 f"integration supports (v{SCHEMA_VERSION}). Update the integration."
             )
-        # Future migrations: `if current < 2: await self._migrate_v2()` etc.
+        if current < 2:
+            await self._migrate_v2()
         if current != SCHEMA_VERSION:
             await conn.execute(
                 "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
                 (str(SCHEMA_VERSION),),
             )
+
+    async def _migrate_v2(self) -> None:
+        """v1 -> v2: add items.barcode + its index. Idempotent (safe on a fresh
+        DB where the column already exists, and on re-runs)."""
+        conn = self._c()
+        with contextlib.suppress(Exception):
+            await conn.execute("ALTER TABLE items ADD COLUMN barcode TEXT")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode)"
+        )
 
     # ------------------------------------------------------------------ #
     # Internal resolvers (callers already hold the lock + use the cursor)
@@ -666,6 +680,7 @@ class InventoryRepository:
             "min_quantity": r["min_quantity"],
             "track_quantity": bool(r["track_quantity"]),
             "aliases": r["aliases"],
+            "barcode": r["barcode"],
             "room": r["room"],
             "cupboard": r["cupboard"],
             "shelf": r["shelf"],
@@ -682,7 +697,7 @@ class InventoryRepository:
                 cur = await conn.execute(
                     """
                     SELECT i.id, i.name, i.image, i.quantity, i.min_quantity,
-                           i.track_quantity, i.aliases,
+                           i.track_quantity, i.aliases, i.barcode,
                            r.name AS room, c.name AS cupboard, s.name AS shelf,
                            o.name AS organizer
                     FROM items i
@@ -699,7 +714,7 @@ class InventoryRepository:
                 cur = await conn.execute(
                     """
                     SELECT i.id, i.name, i.image, i.quantity, i.min_quantity,
-                           i.track_quantity, i.aliases,
+                           i.track_quantity, i.aliases, i.barcode,
                            r.name AS room, c.name AS cupboard, s.name AS shelf,
                            NULL AS organizer
                     FROM items i
@@ -720,7 +735,7 @@ class InventoryRepository:
             cur = await self._c().execute(
                 """
                 SELECT i.id, i.name, i.image, i.quantity, i.min_quantity,
-                       i.track_quantity, i.aliases,
+                       i.track_quantity, i.aliases, i.barcode,
                        r.name AS room, c.name AS cupboard, s.name AS shelf,
                        o.name AS organizer
                 FROM items i
@@ -734,6 +749,29 @@ class InventoryRepository:
             rows = await cur.fetchall()
             await cur.close()
         return [self._item_row_to_dict(r) for r in rows]
+
+    async def find_item_by_barcode(self, barcode: str) -> dict[str, Any] | None:
+        async with self._lock:
+            cur = await self._c().execute(
+                """
+                SELECT i.id, i.name, i.image, i.quantity, i.min_quantity,
+                       i.track_quantity, i.aliases, i.barcode,
+                       r.name AS room, c.name AS cupboard, s.name AS shelf,
+                       o.name AS organizer
+                FROM items i
+                JOIN shelves s ON i.shelf_id = s.id
+                JOIN cupboards c ON s.cupboard_id = c.id
+                JOIN rooms r ON c.room_id = r.id
+                LEFT JOIN organizers o ON i.organizer_id = o.id
+                WHERE i.barcode = ?
+                ORDER BY i.created_at DESC
+                LIMIT 1
+                """,
+                (barcode,),
+            )
+            row = await cur.fetchone()
+            await cur.close()
+        return self._item_row_to_dict(row) if row else None
 
     async def create_item(
         self,
@@ -758,13 +796,14 @@ class InventoryRepository:
             await cur.execute(
                 """
                 INSERT INTO items
-                    (name, aliases, image, shelf_id, organizer_id,
+                    (name, aliases, barcode, image, shelf_id, organizer_id,
                      quantity, min_quantity, track_quantity)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["name"],
                     data.get("aliases"),
+                    data.get("barcode") or None,
                     data.get("image", ""),
                     shelf_id,
                     organizer_id,
@@ -800,6 +839,9 @@ class InventoryRepository:
             if "aliases" in data and data["aliases"] is not None:
                 updates.append("aliases = ?")
                 params.append(data["aliases"])
+            if "barcode" in data:
+                updates.append("barcode = ?")
+                params.append(data["barcode"] or None)
             if new_image is not None:
                 updates.append("image = ?")
                 params.append(new_image)

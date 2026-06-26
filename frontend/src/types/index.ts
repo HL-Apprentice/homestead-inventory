@@ -49,6 +49,7 @@ export interface Item {
   id: number;
   name: string;
   aliases?: string;
+  barcode?: string | null;
   image?: string;
   quantity: number | null;
   min_quantity: number | null;
@@ -57,6 +58,7 @@ export interface Item {
   room?: string;
   cupboard?: string;
   shelf?: string;
+  organizer?: string | null;
 }
 
 // API Response Types
@@ -69,6 +71,7 @@ export interface Config {
   allow_structure_modification: boolean;
   qr_redirect_url?: string;
   language: 'en';
+  enable_barcode_lookup?: boolean;
 }
 
 // State Types

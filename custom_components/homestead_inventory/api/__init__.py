@@ -6,8 +6,10 @@ from homeassistant.core import HomeAssistant
 
 from .item_views import (
     AllItemsView,
+    BarcodeLookupView,
     ConfigView,
     ConsumeView,
+    ItemByBarcodeView,
     ItemDeepLinkView,
     ItemQuantityView,
     ItemsView,
@@ -34,6 +36,8 @@ def register_views(hass: HomeAssistant) -> None:
         ShelvesView(hass),
         OrganizersView(hass),
         ItemsView(hass),
+        ItemByBarcodeView(hass),
+        BarcodeLookupView(hass),
         ItemView(hass),
         ItemQuantityView(hass),
         AllItemsView(hass),

@@ -10,8 +10,12 @@ from custom_components.homestead_inventory.const import DOMAIN
 BASE = f"/api/{DOMAIN}"
 
 
-async def _setup(hass, require_admin=False):
-    options = {"require_admin": True} if require_admin else {}
+async def _setup(hass, require_admin=False, enable_barcode_lookup=False):
+    options = {}
+    if require_admin:
+        options["require_admin"] = True
+    if enable_barcode_lookup:
+        options["enable_barcode_lookup"] = True
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={},
@@ -152,3 +156,57 @@ async def test_non_admin_allowed_when_gate_off(
     client = await hass_client(hass_read_only_access_token)
     resp = await client.get(f"{BASE}/rooms")
     assert resp.status == 200
+
+
+# --------------------------- barcode (v0.2.0) --------------------------- #
+async def _make_shelf(client):
+    await client.post(f"{BASE}/rooms", json={"name": "Kitchen"})
+    await client.post(f"{BASE}/cupboards", json={"room": "Kitchen", "name": "Pantry"})
+    await client.post(
+        f"{BASE}/shelves", json={"room": "Kitchen", "cupboard": "Pantry", "name": "Top"}
+    )
+
+
+async def test_create_item_with_barcode_and_find(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()
+    await _make_shelf(client)
+    resp = await client.post(
+        f"{BASE}/items",
+        json={
+            "room": "Kitchen",
+            "cupboard": "Pantry",
+            "shelf": "Top",
+            "name": "Rice",
+            "barcode": "0123456789012",
+        },
+    )
+    assert resp.status == 200
+
+    resp = await client.get(f"{BASE}/by_barcode?code=0123456789012")
+    assert resp.status == 200
+    assert (await resp.json())["name"] == "Rice"
+
+    resp = await client.get(f"{BASE}/by_barcode?code=000")
+    assert resp.status == 404
+
+
+async def test_barcode_lookup_disabled_by_default(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()
+    resp = await client.get(f"{BASE}/barcode_lookup?code=0123456789012")
+    assert resp.status == 403
+
+
+async def test_barcode_lookup_enabled(hass, hass_client, aioclient_mock):
+    aioclient_mock.get(
+        "https://world.openfoodfacts.org/api/v2/product/0123456789012.json",
+        params={"fields": "product_name,brands"},
+        json={"product": {"product_name": "Basmati Rice", "brands": "ACME, Other"}},
+    )
+    await _setup(hass, enable_barcode_lookup=True)
+    client = await hass_client()
+    resp = await client.get(f"{BASE}/barcode_lookup?code=0123456789012")
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["found"] is True and "Rice" in body["name"]

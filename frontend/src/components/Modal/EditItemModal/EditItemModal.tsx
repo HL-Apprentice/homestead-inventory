@@ -36,6 +36,8 @@ export default function EditItemModal({
     cancelMove,
     setMoveState,
     setAliases,
+    barcode,
+    setBarcode,
     preview,
     setTrack,
     setQuantity,
@@ -70,6 +72,17 @@ export default function EditItemModal({
             value={aliases}
             onChange={(e) => setAliases(e.target.value)}
             className="w-full px-3 py-2 border bg-ha-secondary-bg text-ha-text rounded"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-ha-text text-sm">Barcode</span>
+          <input
+            value={barcode}
+            maxLength={64}
+            onChange={(e) => setBarcode(e.target.value)}
+            className="w-full px-3 py-2 border bg-ha-secondary-bg text-ha-text rounded"
+            placeholder="e.g. 0123456789012"
           />
         </label>
 

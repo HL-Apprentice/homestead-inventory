@@ -21,6 +21,7 @@ REFRESH_TOKEN_KEY = "hass_refresh_token_id"
 # Length caps for free-text fields (enforced server-side; mirrored in the UI).
 MAX_NAME_LEN = 100
 MAX_ALIASES_LEN = 255
+MAX_BARCODE_LEN = 64
 
 
 def json_error(message: str, status: int = 400) -> web.Response:
