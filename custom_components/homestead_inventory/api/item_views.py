@@ -299,7 +299,13 @@ class BarcodeLookupView(HInvView):
             return json_error("Barcode lookup is disabled", 403)
 
         code = clean_str(request.query.get("code"))
-        if not code or not code.isdigit() or len(code) > MAX_BARCODE_LEN:
+        # ASCII digits only — str.isdigit() alone also accepts non-ASCII digit
+        # characters (superscripts, fullwidth, etc.); keep the lookup URL clean.
+        if (
+            not code
+            or not (code.isascii() and code.isdigit())
+            or len(code) > MAX_BARCODE_LEN
+        ):
             return json_error("Invalid barcode")
 
         session = async_get_clientsession(self.hass)

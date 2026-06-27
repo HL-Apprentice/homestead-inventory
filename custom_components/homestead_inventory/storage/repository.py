@@ -773,6 +773,220 @@ class InventoryRepository:
             await cur.close()
         return [self._item_row_to_dict(r) for r in rows]
 
+    # ------------------------------------------------------------------ #
+    # Backup / restore
+    # ------------------------------------------------------------------ #
+
+    async def export_data(self) -> dict[str, Any]:
+        """Full inventory as plain data (containers by name-path + items).
+
+        Empty containers are preserved. Image *filenames* are included for
+        reference; the image files themselves are not part of this JSON.
+        """
+        async with self._lock:
+            conn = self._c()
+
+            async def q(sql: str) -> list:
+                cur = await conn.execute(sql)
+                rows = await cur.fetchall()
+                await cur.close()
+                return rows
+
+            rooms = [
+                {"name": r["name"]}
+                for r in await q("SELECT name FROM rooms ORDER BY name COLLATE NOCASE")
+            ]
+            cupboards = [
+                {"room": r["room"], "name": r["name"], "image": r["image"] or ""}
+                for r in await q(
+                    "SELECT c.name, c.image, r.name AS room FROM cupboards c "
+                    "JOIN rooms r ON c.room_id = r.id "
+                    "ORDER BY r.name, c.name COLLATE NOCASE"
+                )
+            ]
+            shelves = [
+                {"room": r["room"], "cupboard": r["cupboard"], "name": r["name"]}
+                for r in await q(
+                    "SELECT s.name, c.name AS cupboard, r.name AS room FROM shelves s "
+                    "JOIN cupboards c ON s.cupboard_id = c.id "
+                    "JOIN rooms r ON c.room_id = r.id "
+                    "ORDER BY r.name, c.name, s.name COLLATE NOCASE"
+                )
+            ]
+            organizers = [
+                {
+                    "room": r["room"], "cupboard": r["cupboard"],
+                    "shelf": r["shelf"], "name": r["name"], "image": r["image"] or "",
+                }
+                for r in await q(
+                    "SELECT o.name, o.image, s.name AS shelf, c.name AS cupboard, "
+                    "r.name AS room FROM organizers o "
+                    "JOIN shelves s ON o.shelf_id = s.id "
+                    "JOIN cupboards c ON s.cupboard_id = c.id "
+                    "JOIN rooms r ON c.room_id = r.id "
+                    "ORDER BY r.name, c.name, s.name, o.name COLLATE NOCASE"
+                )
+            ]
+
+        keys = ("room", "cupboard", "shelf", "organizer", "name", "aliases",
+                "barcode", "quantity", "min_quantity", "track_quantity", "image")
+        items = [{k: it.get(k) for k in keys} for it in await self.list_all_items()]
+        return {
+            "version": SCHEMA_VERSION,
+            "rooms": rooms,
+            "cupboards": cupboards,
+            "shelves": shelves,
+            "organizers": organizers,
+            "items": items,
+        }
+
+    async def import_data(
+        self, data: dict[str, Any], replace: bool = False
+    ) -> dict[str, int]:
+        """Restore from export_data() output.
+
+        replace=True wipes everything first (full restore); replace=False merges
+        (containers/items already present by name within their parent are reused,
+        not duplicated). Atomic: any error rolls the whole import back.
+        """
+        counts = {"rooms": 0, "cupboards": 0, "shelves": 0, "organizers": 0, "items": 0}
+
+        def _clean(v: Any) -> str:
+            return (v or "").strip() if isinstance(v, str) else ""
+
+        async with self._lock:
+            conn = self._c()
+            async with self._transaction() as t:
+                if replace:
+                    await t.execute("DELETE FROM rooms")  # FK cascade clears all
+
+                async def _scalar(sql: str, params: tuple) -> int | None:
+                    cur = await t.execute(sql, params)
+                    row = await cur.fetchone()
+                    return row[0] if row else None
+
+                async def room_id(name: str) -> int | None:
+                    if not name:
+                        return None
+                    rid = await _scalar(
+                        "SELECT id FROM rooms WHERE name = ? COLLATE NOCASE", (name,)
+                    )
+                    if rid is None:
+                        cur = await t.execute(
+                            "INSERT INTO rooms (name) VALUES (?)", (name,)
+                        )
+                        counts["rooms"] += 1
+                        rid = cur.lastrowid
+                    return rid
+
+                async def cupboard_id(room: str, name: str, image: str = "") -> int | None:
+                    rid = await room_id(room)
+                    if rid is None or not name:
+                        return None
+                    cid = await _scalar(
+                        "SELECT id FROM cupboards WHERE room_id = ? AND name = ? "
+                        "COLLATE NOCASE",
+                        (rid, name),
+                    )
+                    if cid is None:
+                        cur = await t.execute(
+                            "INSERT INTO cupboards (name, image, room_id) VALUES (?, ?, ?)",
+                            (name, image, rid),
+                        )
+                        counts["cupboards"] += 1
+                        cid = cur.lastrowid
+                    return cid
+
+                async def shelf_id(room: str, cupboard: str, name: str) -> int | None:
+                    cid = await cupboard_id(room, cupboard)
+                    if cid is None or not name:
+                        return None
+                    sid = await _scalar(
+                        "SELECT id FROM shelves WHERE cupboard_id = ? AND name = ? "
+                        "COLLATE NOCASE",
+                        (cid, name),
+                    )
+                    if sid is None:
+                        cur = await t.execute(
+                            "INSERT INTO shelves (name, cupboard_id) VALUES (?, ?)",
+                            (name, cid),
+                        )
+                        counts["shelves"] += 1
+                        sid = cur.lastrowid
+                    return sid
+
+                async def organizer_id(
+                    room: str, cupboard: str, shelf: str, name: str, image: str = ""
+                ) -> int | None:
+                    sid = await shelf_id(room, cupboard, shelf)
+                    if sid is None or not name:
+                        return None
+                    oid = await _scalar(
+                        "SELECT id FROM organizers WHERE shelf_id = ? AND name = ? "
+                        "COLLATE NOCASE",
+                        (sid, name),
+                    )
+                    if oid is None:
+                        cur = await t.execute(
+                            "INSERT INTO organizers (name, image, shelf_id) VALUES (?, ?, ?)",
+                            (name, image, sid),
+                        )
+                        counts["organizers"] += 1
+                        oid = cur.lastrowid
+                    return oid
+
+                for r in data.get("rooms", []):
+                    await room_id(_clean(r.get("name")))
+                for c in data.get("cupboards", []):
+                    await cupboard_id(_clean(c.get("room")), _clean(c.get("name")),
+                                      _clean(c.get("image")))
+                for s in data.get("shelves", []):
+                    await shelf_id(_clean(s.get("room")), _clean(s.get("cupboard")),
+                                   _clean(s.get("name")))
+                for o in data.get("organizers", []):
+                    await organizer_id(_clean(o.get("room")), _clean(o.get("cupboard")),
+                                       _clean(o.get("shelf")), _clean(o.get("name")),
+                                       _clean(o.get("image")))
+
+                for it in data.get("items", []):
+                    name = _clean(it.get("name"))
+                    sid = await shelf_id(_clean(it.get("room")),
+                                         _clean(it.get("cupboard")),
+                                         _clean(it.get("shelf")))
+                    if sid is None or not name:
+                        continue
+                    oid = None
+                    if _clean(it.get("organizer")):
+                        oid = await organizer_id(
+                            _clean(it.get("room")), _clean(it.get("cupboard")),
+                            _clean(it.get("shelf")), _clean(it.get("organizer")),
+                        )
+                    exists = await _scalar(
+                        "SELECT id FROM items WHERE shelf_id = ? AND name = ? COLLATE NOCASE "
+                        "AND ((organizer_id IS NULL AND ? IS NULL) OR organizer_id = ?)",
+                        (sid, name, oid, oid),
+                    )
+                    if exists is not None:
+                        continue
+                    await t.execute(
+                        "INSERT INTO items (name, aliases, barcode, image, shelf_id, "
+                        "organizer_id, quantity, min_quantity, track_quantity) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            name,
+                            it.get("aliases"),
+                            (it.get("barcode") or None),
+                            (it.get("image") or ""),
+                            sid,
+                            oid,
+                            _as_int_or_none(it.get("quantity")),
+                            _as_int_or_none(it.get("min_quantity")),
+                            1 if it.get("track_quantity") else 0,
+                        ),
+                    )
+                    counts["items"] += 1
+        return counts
+
     async def find_item_by_barcode(self, barcode: str) -> dict[str, Any] | None:
         async with self._lock:
             cur = await self._c().execute(
@@ -1008,7 +1222,7 @@ class InventoryRepository:
     async def get_consumption_rates(
         self, item_id: int, days: int = 30
     ) -> dict[str, Any]:
-        days = max(1, int(days))
+        days = max(1, min(int(days), 3650))  # cap at ~10y to bound the query
         async with self._lock:
             conn = self._c()
             cur = await conn.execute(

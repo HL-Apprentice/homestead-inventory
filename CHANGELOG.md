@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-06-26
+
+### Added
+- **Home Assistant services** for automations:
+  - `homestead_inventory.consume` — decrement an item by id.
+  - `homestead_inventory.consume_barcode` — decrement the item with a barcode.
+  - `homestead_inventory.set_quantity` — set an item's quantity exactly.
+  - `homestead_inventory.low_stock_to_todo` — append every low-stock item to a
+    to-do list.
+- **Backup & restore** — export the whole inventory (rooms → items, including
+  empty containers) to a JSON file, and import it back. Import can **merge**
+  (no duplicates) or **replace** (wipe first). New endpoints
+  `GET /api/homestead_inventory/export` and `POST /api/homestead_inventory/import`,
+  plus a "Backup" dialog in the panel.
+- A **dark-theme icon** variant for the Home Assistant brands repository.
+
 ## [0.3.0] - 2026-06-26
 
 ### Added
@@ -48,6 +64,7 @@ All notable changes to this project are documented here. The format is based on
   schema versioning), signed/expiring image URLs, optional admin-only access.
 - 100% local by default; English-only UI.
 
+[0.4.0]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.4.0
 [0.3.0]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.3.0
 [0.2.0]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.2.0
 [0.1.0]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.1.0

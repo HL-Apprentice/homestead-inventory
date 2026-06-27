@@ -5,6 +5,7 @@ import { useRoomMutations } from '../hooks/rooms/useRoomMutations';
 import { useHomesteadConfig } from '../hooks/global/useHomesteadConfig';
 import { useRoomNavigation } from '../hooks/rooms/useRoomNavigation';
 import EditRoomModal from '../components/Modal/EditRoomModal';
+import BackupModal from '../components/Modal/BackupModal';
 import ScannerModal from '../components/Modal/LazyScanner';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -25,6 +26,7 @@ export default function RoomsView({ api }: { api: ApiService }) {
   const [roomToEdit, setRoomToEdit] = useState<Room | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [scanMode, setScanMode] = useState<'find' | 'consume'>('find');
+  const [showBackup, setShowBackup] = useState(false);
 
   const handleScanFind = async (code: string) => {
     const item = await api.findItemByBarcode(code);
@@ -83,6 +85,7 @@ export default function RoomsView({ api }: { api: ApiService }) {
           setScanMode('consume');
           setShowScanner(true);
         }}
+        onBackup={() => setShowBackup(true)}
       />
 
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
@@ -128,6 +131,14 @@ export default function RoomsView({ api }: { api: ApiService }) {
             await updateRoom.mutateAsync({ id: roomToEdit.id, name: newName });
             setRoomToEdit(null);
           }}
+        />
+      )}
+
+      {showBackup && (
+        <BackupModal
+          isOpen={true}
+          onClose={() => setShowBackup(false)}
+          api={api}
         />
       )}
 

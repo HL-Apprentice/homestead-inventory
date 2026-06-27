@@ -53,6 +53,11 @@ stability. See [NOTICE](NOTICE) for attribution.
 - **Consumption history & analytics** (v0.3.0): every quantity change is logged.
   Open an item to see its change timeline plus usage analytics (per-day / per-week
   rate and an estimated "days left" at the current pace).
+- **Services for automations** (v0.4.0): `consume`, `consume_barcode`,
+  `set_quantity`, and `low_stock_to_todo` — drive stock from automations,
+  NFC tags, external scanners, or scripts.
+- **Backup & restore** (v0.4.0): export the whole inventory to a JSON file and
+  import it back (merge or full replace) from the panel's **Backup** dialog.
 - Three **sensors**: total items, low stock (with item list), tracked items.
 
 ## Barcode scanning
@@ -118,6 +123,43 @@ automation:
         data:
           name: "{{ trigger.event.data.name }}"
 ```
+
+## Services
+
+| Service | Fields | What it does |
+| --- | --- | --- |
+| `homestead_inventory.consume` | `item_id` | Decrease an item by one (records history). |
+| `homestead_inventory.consume_barcode` | `barcode` | Find an item by barcode and decrease it by one. |
+| `homestead_inventory.set_quantity` | `item_id`, `quantity` | Set an item's quantity exactly. |
+| `homestead_inventory.low_stock_to_todo` | `todo_list` | Append every low-stock item to a to-do list. |
+
+```yaml
+# Example: an NFC tag that uses one roll of paper towels
+automation:
+  - alias: Use a paper towel roll
+    trigger:
+      - platform: tag
+        tag_id: paper-towels
+    action:
+      - service: homestead_inventory.consume_barcode
+        data:
+          barcode: "0036000291452"
+```
+
+## Backup & restore
+
+Open the panel and click **💾 Backup**:
+
+- **Export** downloads the whole inventory (rooms → items, including empty
+  containers) as a JSON file.
+- **Import** restores from such a file. Choose **merge** (adds what's missing,
+  never duplicates) or **replace** (wipes the current inventory first).
+
+Programmatic access: `GET /api/homestead_inventory/export` and
+`POST /api/homestead_inventory/import` (`{"data": <export>, "replace": <bool>}`),
+both behind Home Assistant authentication. Image *files* are not part of the JSON
+(only their filenames), so back those up from `<config>/homestead_inventory/images/`
+if you need them.
 
 ## Development
 
