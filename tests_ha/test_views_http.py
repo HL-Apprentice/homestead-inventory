@@ -210,3 +210,61 @@ async def test_barcode_lookup_enabled(hass, hass_client, aioclient_mock):
     assert resp.status == 200
     body = await resp.json()
     assert body["found"] is True and "Rice" in body["name"]
+
+
+# ---------------------- history + analytics (v0.3.0) ---------------------- #
+async def _make_tracked_item(client, qty=5):
+    await _make_shelf(client)
+    resp = await client.post(
+        f"{BASE}/items",
+        json={
+            "room": "Kitchen",
+            "cupboard": "Pantry",
+            "shelf": "Top",
+            "name": "Rice",
+            "quantity": qty,
+            "min_quantity": 1,
+            "track_quantity": True,
+        },
+    )
+    return (await resp.json())["id"]
+
+
+async def test_consume_records_history_endpoint(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()
+    item_id = await _make_tracked_item(client, qty=5)
+
+    resp = await client.post(f"{BASE}/consume/{item_id}")
+    assert resp.status == 200
+    assert (await resp.json())["new_quantity"] == 4
+
+    resp = await client.get(f"{BASE}/items/{item_id}/history")
+    assert resp.status == 200
+    history = (await resp.json())["history"]
+    assert len(history) == 1
+    assert history[0]["delta"] == -1 and history[0]["source"] == "consume"
+
+
+async def test_consumption_rates_endpoint(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()
+    item_id = await _make_tracked_item(client, qty=30)
+    for _ in range(3):
+        await client.post(f"{BASE}/consume/{item_id}")
+
+    resp = await client.get(f"{BASE}/items/{item_id}/consumption_rates?days=30")
+    assert resp.status == 200
+    rates = await resp.json()
+    assert rates["events"] == 3
+    assert rates["total_used"] == 3
+    assert rates["current_quantity"] == 27
+
+
+async def test_history_empty_for_new_item(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()
+    item_id = await _make_tracked_item(client)
+    resp = await client.get(f"{BASE}/items/{item_id}/history")
+    assert resp.status == 200
+    assert (await resp.json())["history"] == []

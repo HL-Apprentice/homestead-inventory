@@ -245,6 +245,43 @@ export class ApiService {
     );
   }
 
+  /** Decrement an item by one (records consumption history + fires an event). */
+  async consumeItem(id: number): Promise<{ new_quantity: number; name: string }> {
+    return this.hass.callApi('POST', `homestead_inventory/consume/${id}`);
+  }
+
+  async getItemHistory(
+    id: number
+  ): Promise<{
+    history: {
+      quantity_before: number | null;
+      quantity_after: number | null;
+      delta: number;
+      source: string;
+      created_at: string;
+    }[];
+  }> {
+    return this.hass.callApi('GET', `homestead_inventory/items/${id}/history`);
+  }
+
+  async getConsumptionRates(
+    id: number,
+    days = 30
+  ): Promise<{
+    window_days: number;
+    events: number;
+    total_used: number;
+    daily_rate: number;
+    weekly_rate: number;
+    days_left: number | null;
+    current_quantity: number | null;
+  }> {
+    return this.hass.callApi(
+      'GET',
+      `homestead_inventory/items/${id}/consumption_rates?days=${days}`
+    );
+  }
+
   async updateItemQuantity(
     id: number,
     data: { quantity?: number; min_quantity?: number; track_quantity?: boolean }

@@ -6,6 +6,7 @@ interface Props {
   onAddRoom: () => void;
   onTrackStock: () => void;
   onScan: () => void;
+  onScanConsume: () => void;
 }
 
 export default function RoomsHeader({
@@ -14,6 +15,7 @@ export default function RoomsHeader({
   onAllItemsClick,
   onTrackStock,
   onScan,
+  onScanConsume,
 }: Props) {
   const { t } = useTranslation();
   return (
@@ -40,7 +42,14 @@ export default function RoomsHeader({
           aria-label="Scan a barcode to find an item"
           className="px-3 py-2 bg-ha-secondary-bg border border-ha-divider text-ha-text rounded hover:bg-ha-card transition"
         >
-          📷 Scan
+          📷 {t.rooms.scanFind}
+        </button>
+        <button
+          onClick={onScanConsume}
+          aria-label="Scan a barcode to use one of an item"
+          className="px-3 py-2 bg-ha-secondary-bg border border-ha-divider text-ha-text rounded hover:bg-ha-card transition"
+        >
+          📷➖ {t.rooms.scanUse}
         </button>
 
         {allowEdit && (

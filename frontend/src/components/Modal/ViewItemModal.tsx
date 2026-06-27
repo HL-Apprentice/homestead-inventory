@@ -1,19 +1,25 @@
+import { useState } from 'react';
 import { Modal, ModalHeader } from './Modal';
+import HistoryModal from './HistoryModal';
 import type { Item } from '../../types';
+import type { ApiService } from '../../services/api';
 import { useTranslation } from '../../i18n/I18nContext';
 
 interface ViewItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   item: Item;
+  api?: ApiService;
 }
 
 export default function ViewItemModal({
   isOpen,
   onClose,
   item,
+  api,
 }: ViewItemModalProps) {
   const { t } = useTranslation();
+  const [showHistory, setShowHistory] = useState(false);
 
   const isLowStock = !!(
     item.track_quantity &&
@@ -27,7 +33,7 @@ export default function ViewItemModal({
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalHeader onClose={onClose}>{item.name}</ModalHeader>
 
-      {/* Imagine */}
+      {/* Image */}
       {item.image ? (
         <div className="mb-5 text-center">
           <img
@@ -44,7 +50,7 @@ export default function ViewItemModal({
         </div>
       )}
 
-      {/* Locatie */}
+      {/* Location */}
       <div className="bg-ha-secondary-bg p-4 rounded-lg mb-4">
         <div className="text-[0.85em] text-ha-text/70 font-medium mb-2">
           📍 {t.items.location}:
@@ -64,7 +70,7 @@ export default function ViewItemModal({
         </div>
       )}
 
-      {/* Stoc */}
+      {/* Stock */}
       {item.track_quantity ? (
         <div className="bg-ha-secondary-bg p-4 rounded-lg mb-4">
           <div className="text-[0.85em] text-ha-text/70 font-medium mb-3">
@@ -107,12 +113,31 @@ export default function ViewItemModal({
         </div>
       )}
 
+      {/* History */}
+      {api && item.track_quantity && (
+        <button
+          onClick={() => setShowHistory(true)}
+          className="w-full mb-4 px-3 py-2 bg-ha-secondary-bg border border-ha-divider text-ha-text rounded hover:bg-ha-card transition"
+        >
+          📊 {t.items.history}
+        </button>
+      )}
+
       {/* Footer */}
       <div className="text-center pt-4 border-t border-ha-divider">
         <div className="text-[0.85em] text-ha-text/70">
           💡 {t.common.infoViewPress}
         </div>
       </div>
+
+      {api && showHistory && (
+        <HistoryModal
+          isOpen={true}
+          onClose={() => setShowHistory(false)}
+          item={item}
+          api={api}
+        />
+      )}
     </Modal>
   );
 }

@@ -36,6 +36,8 @@ export interface Translations {
     this: string;
     contain: string;
     containItems: string;
+    scanFind: string;
+    scanUse: string;
   };
   cupboards: {
     title: string;
@@ -86,6 +88,29 @@ export interface Translations {
     pieces: string;
     moveItem: string;
     noTrack: string;
+    history: string;
+  };
+  history: {
+    title: string;
+    noHistory: string;
+    analytics: string;
+    perDay: string;
+    perWeek: string;
+    daysLeft: string;
+    totalUsed: string;
+    changes: string;
+    notEnoughData: string;
+    window: string;
+    consumed: string;
+    adjusted: string;
+    loading: string;
+    error: string;
+  };
+  scan: {
+    usedOne: string;
+    notTracked: string;
+    outOfStock: string;
+    notFound: string;
   };
   trackedItems: {
     title: string;
@@ -149,6 +174,8 @@ export const translations: Record<Language, Translations> = {
       this: 'This',
       contain: 'contain',
       containItems: 'items which will be removed',
+      scanFind: 'Find',
+      scanUse: 'Use 1',
     },
     cupboards: {
       title: 'Cupboards',
@@ -199,6 +226,29 @@ export const translations: Record<Language, Translations> = {
       pieces: 'pieces',
       moveItem: 'Move the item',
       noTrack: 'The quantity is not tracked for this item',
+      history: 'History',
+    },
+    history: {
+      title: 'History & usage',
+      noHistory: 'No quantity changes recorded yet.',
+      analytics: 'Usage analytics',
+      perDay: 'Per day',
+      perWeek: 'Per week',
+      daysLeft: 'Est. days left',
+      totalUsed: 'Used',
+      changes: 'Changes',
+      notEnoughData: 'Not enough usage data yet.',
+      window: 'last 30 days',
+      consumed: 'Consumed',
+      adjusted: 'Adjusted',
+      loading: 'Loading history...',
+      error: 'Could not load history.',
+    },
+    scan: {
+      usedOne: 'Used 1',
+      notTracked: 'is not a tracked item.',
+      outOfStock: 'is already at 0.',
+      notFound: 'No item found for barcode',
     },
     trackedItems: {
       title: 'Tracked Items',
