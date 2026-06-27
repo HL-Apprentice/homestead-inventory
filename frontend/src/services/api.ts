@@ -297,6 +297,31 @@ export class ApiService {
     return this.hass.callApi('DELETE', `homestead_inventory/items/${id}`);
   }
 
+  /** Download the entire inventory as a plain object (containers + items). */
+  async exportData(): Promise<Record<string, unknown>> {
+    return this.hass.callApi('GET', 'homestead_inventory/export');
+  }
+
+  /** Restore an inventory. replace=true wipes first; false merges. */
+  async importData(
+    data: Record<string, unknown>,
+    replace: boolean
+  ): Promise<{
+    imported: {
+      rooms: number;
+      cupboards: number;
+      shelves: number;
+      organizers: number;
+      items: number;
+    };
+    replace: boolean;
+  }> {
+    return this.hass.callApi('POST', 'homestead_inventory/import', {
+      data,
+      replace,
+    });
+  }
+
   async uploadImage(file: File, context: UploadContext = {}): Promise<string> {
     const formData = new FormData();
     formData.append('file', file);

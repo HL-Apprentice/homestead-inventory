@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
 
+from .backup_views import ExportView, ImportView
 from .item_views import (
     AllItemsView,
     BarcodeLookupView,
@@ -48,6 +49,8 @@ def register_views(hass: HomeAssistant) -> None:
         ConsumeView(hass),
         ItemDeepLinkView(hass),
         ConfigView(hass),
+        ExportView(hass),
+        ImportView(hass),
         UploadView(hass),
         ImageView(hass),
     ]
