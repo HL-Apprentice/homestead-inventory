@@ -142,6 +142,7 @@ export default function ItemCard({
           isOpen={true}
           onClose={() => setShowViewModal(false)}
           item={item}
+          api={api}
         />
       )}
       {showEditModal && (

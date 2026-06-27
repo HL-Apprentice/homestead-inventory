@@ -5,8 +5,9 @@ import { useRoomMutations } from '../hooks/rooms/useRoomMutations';
 import { useHomesteadConfig } from '../hooks/global/useHomesteadConfig';
 import { useRoomNavigation } from '../hooks/rooms/useRoomNavigation';
 import EditRoomModal from '../components/Modal/EditRoomModal';
-import ScannerModal from '../components/Modal/ScannerModal';
+import ScannerModal from '../components/Modal/LazyScanner';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
 import type { ApiService } from '../services/api';
 import type { Room } from '../types';
@@ -18,23 +19,48 @@ export default function RoomsView({ api }: { api: ApiService }) {
   const { data: config } = useHomesteadConfig(api);
   const { goToRoom, goToAllItems, goToTrackedItems } = useRoomNavigation();
   const { addRoom, updateRoom } = useRoomMutations(api);
+  const queryClient = useQueryClient();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [roomToEdit, setRoomToEdit] = useState<Room | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [scanMode, setScanMode] = useState<'find' | 'consume'>('find');
 
   const handleScanFind = async (code: string) => {
+    const item = await api.findItemByBarcode(code);
+    const s = useAppStore.getState();
+    s.setSelectedRoom(item.room ?? null);
+    s.setSelectedCupboard(item.cupboard ?? null);
+    s.setSelectedShelf(item.shelf ?? null);
+    s.setSelectedOrganizer(item.organizer ?? null);
+    s.setView('items');
+  };
+
+  const handleScanConsume = async (code: string) => {
+    const item = await api.findItemByBarcode(code);
+    if (!item.track_quantity) {
+      alert(`"${item.name}" ${t.scan.notTracked}`);
+      return;
+    }
+    if (item.quantity !== null && item.quantity <= 0) {
+      alert(`"${item.name}" ${t.scan.outOfStock}`);
+      return;
+    }
+    const res = await api.consumeItem(item.id);
+    await queryClient.invalidateQueries();
+    alert(`${t.scan.usedOne} "${res.name}" — ${res.new_quantity} left.`);
+  };
+
+  const handleDetect = async (code: string) => {
     setShowScanner(false);
     try {
-      const item = await api.findItemByBarcode(code);
-      const s = useAppStore.getState();
-      s.setSelectedRoom(item.room ?? null);
-      s.setSelectedCupboard(item.cupboard ?? null);
-      s.setSelectedShelf(item.shelf ?? null);
-      s.setSelectedOrganizer(item.organizer ?? null);
-      s.setView('items');
+      if (scanMode === 'consume') {
+        await handleScanConsume(code);
+      } else {
+        await handleScanFind(code);
+      }
     } catch {
-      alert(`No item found for barcode "${code}".`);
+      alert(`${t.scan.notFound} "${code}".`);
     }
   };
 
@@ -49,7 +75,14 @@ export default function RoomsView({ api }: { api: ApiService }) {
         onTrackStock={goToTrackedItems}
         onAllItemsClick={goToAllItems}
         onAddRoom={() => setShowAddModal(true)}
-        onScan={() => setShowScanner(true)}
+        onScan={() => {
+          setScanMode('find');
+          setShowScanner(true);
+        }}
+        onScanConsume={() => {
+          setScanMode('consume');
+          setShowScanner(true);
+        }}
       />
 
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
@@ -101,8 +134,12 @@ export default function RoomsView({ api }: { api: ApiService }) {
       <ScannerModal
         isOpen={showScanner}
         onClose={() => setShowScanner(false)}
-        onDetect={handleScanFind}
-        title="Scan to find an item"
+        onDetect={handleDetect}
+        title={
+          scanMode === 'consume'
+            ? 'Scan to use one'
+            : 'Scan to find an item'
+        }
       />
     </div>
   );
