@@ -48,14 +48,21 @@ stability. See [NOTICE](NOTICE) for attribution.
 - **Barcode support** (v0.2.0): store a barcode per item, scan one with the
   device camera when adding/editing, and **scan-to-find** an item from the Rooms
   view. See notes below.
+- **Scan-to-consume** (v0.3.0): tap **📷➖ Use 1** on the Rooms screen, scan an
+  item, and its quantity drops by one — restocking errands made one-tap.
+- **Consumption history & analytics** (v0.3.0): every quantity change is logged.
+  Open an item to see its change timeline plus usage analytics (per-day / per-week
+  rate and an estimated "days left" at the current pace).
 - Three **sensors**: total items, low stock (with item list), tracked items.
 
 ## Barcode scanning
 
 - **Store & scan**: each item has an optional barcode. Type it, or tap **📷 Scan**
   in the add/edit dialog to read it with the camera.
-- **Scan to find**: the **📷 Scan** button on the Rooms screen reads a barcode and
+- **Scan to find**: the **📷 Find** button on the Rooms screen reads a barcode and
   jumps straight to the matching item.
+- **Scan to consume**: the **📷➖ Use 1** button reads a barcode and decrements that
+  item by one (skips untracked or already-empty items).
 - **Camera requires a secure context.** Browsers only allow camera access over
   **HTTPS or localhost** (e.g. Nabu Casa, an HTTPS reverse proxy, or the Companion
   app). Over plain `http://<ip>:8123` the scanner is unavailable — manual barcode

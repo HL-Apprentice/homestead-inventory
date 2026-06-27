@@ -322,3 +322,29 @@ class BarcodeLookupView(HInvView):
             return web.json_response({"found": False})
         full = f"{brand} {name}".strip() if brand else name
         return web.json_response({"found": True, "name": full[:MAX_NAME_LEN]})
+
+
+class ItemHistoryView(HInvView):
+    """Recent quantity-change history for an item."""
+
+    url = f"/api/{DOMAIN}/items/{{item_id}}/history"
+    name = f"api:{DOMAIN}:item_history"
+
+    async def get(self, request, item_id):
+        return web.json_response({"history": await self.repo.get_item_history(item_id)})
+
+
+class ItemConsumptionRatesView(HInvView):
+    """Computed consumption analytics for an item over a time window."""
+
+    url = f"/api/{DOMAIN}/items/{{item_id}}/consumption_rates"
+    name = f"api:{DOMAIN}:item_rates"
+
+    async def get(self, request, item_id):
+        try:
+            days = int(request.query.get("days", 30))
+        except (TypeError, ValueError):
+            days = 30
+        return web.json_response(
+            await self.repo.get_consumption_rates(item_id, days)
+        )

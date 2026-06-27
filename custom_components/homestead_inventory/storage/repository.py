@@ -30,7 +30,7 @@ import aiosqlite
 
 _LOGGER = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Unique sentinel for "argument not supplied" — avoids colliding with any real
 # value a caller might pass (a magic string could).
@@ -201,6 +201,7 @@ class InventoryRepository:
         if row is None:
             # Fresh DB created at the current schema; ensure derived objects exist.
             await self._migrate_v2()
+            await self._migrate_v3()
             await conn.execute(
                 "INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
@@ -220,6 +221,8 @@ class InventoryRepository:
             )
         if current < 2:
             await self._migrate_v2()
+        if current < 3:
+            await self._migrate_v3()
         if current != SCHEMA_VERSION:
             await conn.execute(
                 "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
@@ -234,6 +237,26 @@ class InventoryRepository:
             await conn.execute("ALTER TABLE items ADD COLUMN barcode TEXT")
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode)"
+        )
+
+    async def _migrate_v3(self) -> None:
+        """v2 -> v3: add the consumption_history table + index. Idempotent."""
+        conn = self._c()
+        await conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS consumption_history (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id          INTEGER NOT NULL,
+                quantity_before  INTEGER,
+                quantity_after   INTEGER,
+                delta            INTEGER NOT NULL,
+                source           TEXT NOT NULL DEFAULT 'adjust',
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_history_item
+                ON consumption_history(item_id, created_at);
+            """
         )
 
     # ------------------------------------------------------------------ #
@@ -898,6 +921,17 @@ class InventoryRepository:
             )
             return count, stale, None
 
+    @staticmethod
+    async def _record_history(conn, item_id, before, after, source) -> None:
+        """Append a consumption_history row for a quantity change."""
+        delta = (after or 0) - (before or 0)
+        await conn.execute(
+            "INSERT INTO consumption_history "
+            "(item_id, quantity_before, quantity_after, delta, source) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (item_id, before, after, delta, source),
+        )
+
     async def update_item_quantity(
         self,
         item_id: int,
@@ -907,10 +941,23 @@ class InventoryRepository:
     ) -> int:
         async with self._lock:
             conn = self._c()
+
+            before = None
+            new_q = None
+            record = quantity is not _UNSET
+            if record:
+                cur0 = await conn.execute(
+                    "SELECT quantity FROM items WHERE id = ?", (item_id,)
+                )
+                row0 = await cur0.fetchone()
+                await cur0.close()
+                before = row0[0] if row0 else None
+                new_q = _as_int_or_none(quantity)
+
             updates, params = [], []
             if quantity is not _UNSET:
                 updates.append("quantity = ?")
-                params.append(_as_int_or_none(quantity))
+                params.append(new_q)
             if min_quantity is not _UNSET:
                 updates.append("min_quantity = ?")
                 params.append(_as_int_or_none(min_quantity))
@@ -921,11 +968,75 @@ class InventoryRepository:
                 return 0
             updates.append("updated_at = CURRENT_TIMESTAMP")
             params.append(item_id)
-            cur = await conn.execute(
-                f"UPDATE items SET {', '.join(updates)} WHERE id = ?", params
+            # Update and its history row (if any) must be atomic.
+            async with self._transaction() as tconn:
+                cur = await tconn.execute(
+                    f"UPDATE items SET {', '.join(updates)} WHERE id = ?", params
+                )
+                rowcount = cur.rowcount
+                if record and rowcount and new_q != before:
+                    await self._record_history(tconn, item_id, before, new_q, "adjust")
+            return rowcount
+
+    async def get_item_history(
+        self, item_id: int, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        async with self._lock:
+            cur = await self._c().execute(
+                """
+                SELECT quantity_before, quantity_after, delta, source, created_at
+                FROM consumption_history
+                WHERE item_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (item_id, int(limit)),
             )
-            await conn.commit()
-            return cur.rowcount
+            rows = await cur.fetchall()
+            await cur.close()
+        return [
+            {
+                "quantity_before": r[0],
+                "quantity_after": r[1],
+                "delta": r[2],
+                "source": r[3],
+                "created_at": r[4],
+            }
+            for r in rows
+        ]
+
+    async def get_consumption_rates(
+        self, item_id: int, days: int = 30
+    ) -> dict[str, Any]:
+        days = max(1, int(days))
+        async with self._lock:
+            conn = self._c()
+            cur = await conn.execute(
+                "SELECT quantity FROM items WHERE id = ?", (item_id,)
+            )
+            row = await cur.fetchone()
+            current_qty = row[0] if row else None
+            cur = await conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(-delta), 0) FROM consumption_history "
+                "WHERE item_id = ? AND delta < 0 AND created_at >= datetime('now', ?)",
+                (item_id, f"-{days} days"),
+            )
+            events, total_used = await cur.fetchone()
+            await cur.close()
+        total_used = total_used or 0
+        daily = total_used / days
+        days_left = (
+            current_qty / daily if (daily > 0 and current_qty is not None) else None
+        )
+        return {
+            "window_days": days,
+            "events": events,
+            "total_used": total_used,
+            "daily_rate": round(daily, 2),
+            "weekly_rate": round(daily * 7, 2),
+            "days_left": round(days_left, 1) if days_left is not None else None,
+            "current_quantity": current_qty,
+        }
 
     async def delete_item(self, item_id: int) -> tuple[int, str | None]:
         async with self._lock:
@@ -962,11 +1073,16 @@ class InventoryRepository:
                 return None, "Item quantity is already 0 or not set"
 
             new_qty = item["quantity"] - 1
-            await conn.execute(
-                "UPDATE items SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (new_qty, item_id),
-            )
-            await conn.commit()
+            # The decrement and its history row must land together.
+            async with self._transaction() as tconn:
+                await tconn.execute(
+                    "UPDATE items SET quantity = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = ?",
+                    (new_qty, item_id),
+                )
+                await self._record_history(
+                    tconn, item_id, item["quantity"], new_qty, "consume"
+                )
             location = f"{item['room']} / {item['cupboard']} / {item['shelf']}"
             is_low = item["min_quantity"] is not None and new_qty <= item["min_quantity"]
             return (

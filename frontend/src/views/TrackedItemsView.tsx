@@ -203,6 +203,7 @@ const TrackedItemsView: FC<Props> = ({ api }): ReactElement => {
             setSelectedItem(null);
           }}
           item={selectedItem}
+          api={api}
         />
       )}
       {selectedItem && showEditModal && (
