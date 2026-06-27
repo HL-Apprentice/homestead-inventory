@@ -1,0 +1,60 @@
+consume:
+  name: Consume item
+  description: Decrease an item's quantity by one and record it in the item's history.
+  fields:
+    item_id:
+      name: Item ID
+      description: The numeric ID of the item (shown in the panel / export).
+      required: true
+      example: 12
+      selector:
+        number:
+          min: 1
+          mode: box
+
+consume_barcode:
+  name: Consume by barcode
+  description: Find an item by its stored barcode and decrease its quantity by one.
+  fields:
+    barcode:
+      name: Barcode
+      description: The barcode stored on the item.
+      required: true
+      example: "0123456789012"
+      selector:
+        text:
+
+set_quantity:
+  name: Set quantity
+  description: Set an item's quantity to an exact value.
+  fields:
+    item_id:
+      name: Item ID
+      description: The numeric ID of the item.
+      required: true
+      example: 12
+      selector:
+        number:
+          min: 1
+          mode: box
+    quantity:
+      name: Quantity
+      description: The new quantity (0 or greater).
+      required: true
+      example: 5
+      selector:
+        number:
+          min: 0
+          mode: box
+
+low_stock_to_todo:
+  name: Add low-stock items to a to-do list
+  description: Append every item that is currently at or below its minimum quantity to a to-do list.
+  fields:
+    todo_list:
+      name: To-do list
+      description: The to-do list entity to add items to.
+      required: true
+      selector:
+        entity:
+          domain: todo

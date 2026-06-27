@@ -112,6 +112,22 @@ export interface Translations {
     outOfStock: string;
     notFound: string;
   };
+  backup: {
+    title: string;
+    button: string;
+    export: string;
+    exportHint: string;
+    import: string;
+    importHint: string;
+    chooseFile: string;
+    replace: string;
+    replaceWarning: string;
+    merge: string;
+    confirmReplace: string;
+    importing: string;
+    done: string;
+    badFile: string;
+  };
   trackedItems: {
     title: string;
     loading: string;
@@ -249,6 +265,24 @@ export const translations: Record<Language, Translations> = {
       notTracked: 'is not a tracked item.',
       outOfStock: 'is already at 0.',
       notFound: 'No item found for barcode',
+    },
+    backup: {
+      title: 'Backup & restore',
+      button: 'Backup',
+      export: 'Export inventory',
+      exportHint: 'Download your whole inventory as a JSON file.',
+      import: 'Import',
+      importHint: 'Restore from a previously exported JSON file.',
+      chooseFile: 'Choose backup file',
+      replace: 'Replace everything (wipe current inventory first)',
+      replaceWarning:
+        'This permanently deletes the current inventory before importing.',
+      merge: 'Merge into the current inventory',
+      confirmReplace:
+        'This will permanently DELETE your current inventory and replace it with the backup. Continue?',
+      importing: 'Importing...',
+      done: 'Imported',
+      badFile: 'That file is not a valid Homestead Inventory backup.',
     },
     trackedItems: {
       title: 'Tracked Items',

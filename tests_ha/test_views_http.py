@@ -268,3 +268,50 @@ async def test_history_empty_for_new_item(hass, hass_client):
     resp = await client.get(f"{BASE}/items/{item_id}/history")
     assert resp.status == 200
     assert (await resp.json())["history"] == []
+
+
+# ---------------------- export / import (v0.4.0) ---------------------- #
+async def test_export_then_import_replace(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()
+    await _make_tracked_item(client, qty=7)
+
+    resp = await client.get(f"{BASE}/export")
+    assert resp.status == 200
+    data = await resp.json()
+    assert len(data["items"]) == 1 and data["items"][0]["name"] == "Rice"
+
+    # Wipe and restore from the exported payload.
+    resp = await client.post(f"{BASE}/import", json={"data": data, "replace": True})
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["replace"] is True
+    assert body["imported"]["items"] == 1
+
+    resp = await client.get(f"{BASE}/all_items")
+    items = await resp.json()
+    assert len(items) == 1 and items[0]["name"] == "Rice"
+
+
+async def test_import_rejects_bad_payload(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()
+    resp = await client.post(f"{BASE}/import", json={"replace": True})
+    assert resp.status == 400
+    resp = await client.post(f"{BASE}/import", json={"data": {"rooms": "nope"}})
+    assert resp.status == 400
+
+
+async def test_import_merge_no_duplicates(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()
+    await _make_tracked_item(client, qty=5)
+    resp = await client.get(f"{BASE}/export")
+    data = await resp.json()
+
+    # Merge the same data back -> nothing new.
+    resp = await client.post(f"{BASE}/import", json={"data": data, "replace": False})
+    assert resp.status == 200
+    assert (await resp.json())["imported"]["items"] == 0
+    resp = await client.get(f"{BASE}/all_items")
+    assert len(await resp.json()) == 1

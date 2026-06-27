@@ -21,6 +21,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .api import register_views
 from .const import DB_PATH, DOMAIN, INTEGRATION_NAME
+from .services import async_register_services, async_unregister_services
 from .storage import InventoryRepository
 
 _LOGGER = logging.getLogger(__name__)
@@ -82,6 +83,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise
         _LOGGER.debug("Panel already registered: %s", err)
 
+    async_register_services(hass)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     _LOGGER.info("%s ready", INTEGRATION_NAME)
@@ -97,6 +100,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:
         return False
+
+    async_unregister_services(hass)
 
     try:
         async_remove_panel(hass, DOMAIN)
