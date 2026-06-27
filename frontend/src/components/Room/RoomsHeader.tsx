@@ -7,6 +7,7 @@ interface Props {
   onTrackStock: () => void;
   onScan: () => void;
   onScanConsume: () => void;
+  onBackup: () => void;
 }
 
 export default function RoomsHeader({
@@ -16,6 +17,7 @@ export default function RoomsHeader({
   onTrackStock,
   onScan,
   onScanConsume,
+  onBackup,
 }: Props) {
   const { t } = useTranslation();
   return (
@@ -51,6 +53,16 @@ export default function RoomsHeader({
         >
           📷➖ {t.rooms.scanUse}
         </button>
+
+        {allowEdit && (
+          <button
+            onClick={onBackup}
+            aria-label={t.backup.title}
+            className="px-3 py-2 bg-ha-secondary-bg border border-ha-divider text-ha-text rounded hover:bg-ha-card transition"
+          >
+            💾 {t.backup.button}
+          </button>
+        )}
 
         {allowEdit && (
           <button

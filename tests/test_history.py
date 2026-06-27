@@ -49,6 +49,17 @@ async def test_consumption_rates(repo):
     assert rates["days_left"] is not None
 
 
+async def test_consumption_rates_days_capped(repo):
+    item_id = await _seed_item(repo, 30)
+    await repo.consume_item(item_id)
+    # An absurd window is clamped to the 10-year cap (no pathological query).
+    rates = await repo.get_consumption_rates(item_id, days=10**12)
+    assert rates["window_days"] == 3650
+    # And a zero/negative window floors at 1.
+    rates = await repo.get_consumption_rates(item_id, days=0)
+    assert rates["window_days"] == 1
+
+
 async def test_history_cascades_on_item_delete(repo):
     item_id = await _seed_item(repo, 5)
     await repo.consume_item(item_id)
