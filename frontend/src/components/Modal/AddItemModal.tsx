@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Modal, ModalHeader, ModalFooter } from './Modal';
-import ScannerModal from './ScannerModal';
+import ScannerModal from './LazyScanner';
 import { useTranslation } from '../../i18n/I18nContext';
 import { useHomesteadConfig } from '../../hooks/global/useHomesteadConfig';
 import type { ApiService } from '../../services/api';
