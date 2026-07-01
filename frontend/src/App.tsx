@@ -17,6 +17,7 @@ import TrackedItemsView from './views/TrackedItemsView';
 import { I18nProvider } from './i18n/I18nContext';
 import { useHomesteadConfig } from './hooks/global/useHomesteadConfig';
 import { ApiProvider } from './contexts/ApiContext';
+import { base64ToUtf8 } from './utils/qr-generator';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,7 +64,7 @@ function App({ hass: hassProp }: AppProps) {
 
     if (dataParam && hass) {
       try {
-        const { room, cupboard } = JSON.parse(atob(dataParam));
+        const { room, cupboard } = JSON.parse(base64ToUtf8(dataParam));
         if (room && cupboard) {
           useAppStore.getState().setSelectedRoom(room);
           useAppStore.getState().setSelectedCupboard(cupboard);

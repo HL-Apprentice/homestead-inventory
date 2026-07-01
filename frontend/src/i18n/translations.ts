@@ -151,6 +151,7 @@ export interface Translations {
     sameLocationItem: string;
     preloadMoveLocation: string;
     getRoomsError: string;
+    qrFailed: string;
   };
 }
 
@@ -307,6 +308,7 @@ export const translations: Record<Language, Translations> = {
       sameLocationItem: 'The item is in the same location',
       preloadMoveLocation: 'Error at preloaded current location',
       getRoomsError: 'Error at fetching rooms.',
+      qrFailed: 'Could not create the QR code. Please try again.',
     },
   },
 };
