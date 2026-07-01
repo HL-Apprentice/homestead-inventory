@@ -82,10 +82,15 @@ export default function CupboardsView({ api }: Props) {
               editable={config?.allow_structure_modification}
               onClick={() => goToCupboard(cupboard.name)}
               onEdit={() => setEditingCupboard(cupboard)}
-              onQR={(e: ClickOrTouchEvent) => {
+              onQR={async (e: ClickOrTouchEvent) => {
                 e.preventDefault();
                 e.stopPropagation();
-                downloadQRCode(selectedRoom, cupboard.name);
+                try {
+                  await downloadQRCode(selectedRoom, cupboard.name);
+                } catch (err) {
+                  console.error('QR download failed:', err);
+                  alert(t.errors.qrFailed);
+                }
               }}
             />
           ))
