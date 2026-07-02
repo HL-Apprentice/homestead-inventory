@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/HL-Apprentice/homestead-inventory/issues",
   "loggers": ["custom_components.homestead_inventory"],
   "requirements": ["Pillow>=10.0.0", "aiosqlite>=0.20.0"],
-  "version": "0.4.0"
+  "version": "0.4.1"
 }

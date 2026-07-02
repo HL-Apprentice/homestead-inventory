@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-07-02
+
+### Fixed
+A recursive three-model correctness review (Claude + Grok + Gemini, run to
+convergence) found and fixed a batch of frontend + robustness bugs:
+- **QR deep links** now work for names with accents, emoji, or any non-ASCII
+  character (previously `btoa` threw and the QR silently failed); legacy codes
+  still decode. Hostile/malformed deep links can no longer blank the panel.
+- Failed saves/deletes in dialogs now show an error and recover instead of
+  wedging on a disabled button; the QR download and scan-to-consume report the
+  right message on failure.
+- Image upload no longer crashes on failure (a React hook was called from a
+  non-component); the camera scanner no longer risks a stale callback.
+- `consume_barcode` service is now atomic (resolve + decrement under one lock).
+- A full "replace" import now deletes the old, now-unreferenced image files.
+- Removed a dead deep-link endpoint; assorted correctness and consistency fixes.
+
 ## [0.4.0] - 2026-06-26
 
 ### Added
@@ -64,6 +81,7 @@ All notable changes to this project are documented here. The format is based on
   schema versioning), signed/expiring image URLs, optional admin-only access.
 - 100% local by default; English-only UI.
 
+[0.4.1]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.4.1
 [0.4.0]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.4.0
 [0.3.0]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.3.0
 [0.2.0]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.2.0
