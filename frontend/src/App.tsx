@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from './../node_modules/@tanstack/react-query-devtools/src/production';
 import { useHass } from './hooks/global/useHass';
@@ -58,22 +58,40 @@ function App({ hass: hassProp }: AppProps) {
   const { hass: hassHook, loading, error } = useHass();
   const hass = hassProp || hassHook;
 
+  // One stable ApiService per hass — a fresh instance each render would give
+  // react-query an unstable queryFn identity and churn memoized children.
+  const api = useMemo(() => (hass ? new ApiService(hass) : null), [hass]);
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const dataParam = urlParams.get('data');
+    if (!dataParam || !hass) return;
 
-    if (dataParam && hass) {
-      try {
-        const { room, cupboard } = JSON.parse(base64ToUtf8(dataParam));
-        if (room && cupboard) {
-          useAppStore.getState().setSelectedRoom(room);
-          useAppStore.getState().setSelectedCupboard(cupboard);
-          useAppStore.getState().setView('shelves');
-        }
-        window.history.replaceState({}, '', window.location.pathname);
-      } catch (e) {
-        console.warn('Invalid deep link');
+    // Consume the data param up front — whether or not parsing succeeds — so a
+    // malformed link isn't re-parsed on every hass update. Any nav params the
+    // store writes below then persist in the URL for refresh.
+    urlParams.delete('data');
+    const rest = urlParams.toString();
+    window.history.replaceState(
+      {},
+      '',
+      window.location.pathname + (rest ? `?${rest}` : '')
+    );
+
+    try {
+      const { room, cupboard } = JSON.parse(base64ToUtf8(dataParam));
+      if (
+        typeof room === 'string' &&
+        typeof cupboard === 'string' &&
+        room &&
+        cupboard
+      ) {
+        useAppStore.getState().setSelectedRoom(room);
+        useAppStore.getState().setSelectedCupboard(cupboard);
+        useAppStore.getState().setView('shelves');
       }
+    } catch {
+      console.warn('Invalid deep link');
     }
   }, [hass]);
 
@@ -100,12 +118,10 @@ function App({ hass: hassProp }: AppProps) {
     );
   }
 
-  const api = new ApiService(hass);
-
   return (
     <QueryClientProvider client={queryClient}>
       <ApiProvider hass={hass}>
-        <AppContent api={api} />
+        <AppContent api={api!} />
       </ApiProvider>
     </QueryClientProvider>
   );

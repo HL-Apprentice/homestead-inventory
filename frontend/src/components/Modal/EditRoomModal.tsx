@@ -32,9 +32,15 @@ export default function EditRoomModal({
 
   const handleSave = async () => {
     setLoading(true);
-    await onSave(name);
-    setLoading(false);
-    onClose();
+    try {
+      await onSave(name);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert(t.errors.generalError);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
