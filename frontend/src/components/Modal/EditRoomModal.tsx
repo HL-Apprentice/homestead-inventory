@@ -96,10 +96,7 @@ export default function EditRoomModal({
           itemName={room.name}
           itemType={t.rooms.room.toLowerCase()}
           itemCount={room.itemCount}
-          onClose={() => {
-            onClose();
-            setShowDeleteModal(null);
-          }}
+          onClose={() => setShowDeleteModal(null)}
           onConfirm={async () => {
             await deleteRoom.mutateAsync(room.id);
             onClose();
