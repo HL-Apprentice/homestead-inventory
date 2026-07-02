@@ -842,14 +842,18 @@ class InventoryRepository:
 
     async def import_data(
         self, data: dict[str, Any], replace: bool = False
-    ) -> dict[str, int]:
+    ) -> tuple[dict[str, int], list[str]]:
         """Restore from export_data() output.
 
         replace=True wipes everything first (full restore); replace=False merges
         (containers/items already present by name within their parent are reused,
         not duplicated). Atomic: any error rolls the whole import back.
+
+        Returns (counts, orphaned_images): image filenames whose rows were wiped
+        by a replace, so the caller can delete the now-unreferenced files.
         """
         counts = {"rooms": 0, "cupboards": 0, "shelves": 0, "organizers": 0, "items": 0}
+        orphaned_images: list[str] = []
 
         def _clean(v: Any) -> str:
             return (v or "").strip() if isinstance(v, str) else ""
@@ -858,6 +862,13 @@ class InventoryRepository:
             conn = self._c()
             async with self._transaction() as t:
                 if replace:
+                    # Gather image filenames before the cascade wipes their rows.
+                    for tbl in ("cupboards", "organizers", "items"):
+                        cur = await t.execute(
+                            f"SELECT image FROM {tbl} "
+                            "WHERE image IS NOT NULL AND image != ''"
+                        )
+                        orphaned_images += [row[0] for row in await cur.fetchall()]
                     await t.execute("DELETE FROM rooms")  # FK cascade clears all
 
                 async def _scalar(sql: str, params: tuple) -> int | None:
@@ -985,7 +996,7 @@ class InventoryRepository:
                         ),
                     )
                     counts["items"] += 1
-        return counts
+        return counts, orphaned_images
 
     async def find_item_by_barcode(self, barcode: str) -> dict[str, Any] | None:
         async with self._lock:
@@ -1262,59 +1273,81 @@ class InventoryRepository:
             await conn.commit()
             return cur.rowcount, old_image
 
+    _CONSUME_SELECT = """
+        SELECT i.id, i.name, i.aliases, i.quantity, i.min_quantity, i.track_quantity,
+               r.name AS room, c.name AS cupboard, s.name AS shelf
+        FROM items i
+        JOIN shelves s ON i.shelf_id = s.id
+        JOIN cupboards c ON s.cupboard_id = c.id
+        JOIN rooms r ON c.room_id = r.id
+        WHERE {where}
+    """
+
     async def consume_item(self, item_id: int) -> tuple[dict[str, Any] | None, str | None]:
         """Decrement quantity by 1 if tracked + in stock. Returns (result, error)."""
         async with self._lock:
             conn = self._c()
             cur = await conn.execute(
-                """
-                SELECT i.id, i.name, i.aliases, i.quantity, i.min_quantity, i.track_quantity,
-                       r.name AS room, c.name AS cupboard, s.name AS shelf
-                FROM items i
-                JOIN shelves s ON i.shelf_id = s.id
-                JOIN cupboards c ON s.cupboard_id = c.id
-                JOIN rooms r ON c.room_id = r.id
-                WHERE i.id = ?
-                """,
-                (item_id,),
+                self._CONSUME_SELECT.format(where="i.id = ?"), (item_id,)
+            )
+            return await self._consume_row(conn, await cur.fetchone())
+
+    async def consume_item_by_barcode(
+        self, barcode: str
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """Resolve barcode -> item and decrement, atomically under one lock so the
+        item can't be reassigned between the lookup and the decrement."""
+        async with self._lock:
+            conn = self._c()
+            cur = await conn.execute(
+                self._CONSUME_SELECT.format(where="i.barcode = ?")
+                + " ORDER BY i.created_at DESC LIMIT 1",
+                (barcode,),
             )
             item = await cur.fetchone()
-            if not item:
-                return None, "Item not found"
-            if not item["track_quantity"]:
-                return None, "Item does not have quantity tracking enabled"
-            if item["quantity"] is None or item["quantity"] <= 0:
-                return None, "Item quantity is already 0 or not set"
+            if item is None:
+                return None, "No item with that barcode"
+            return await self._consume_row(conn, item)
 
-            new_qty = item["quantity"] - 1
-            # The decrement and its history row must land together.
-            async with self._transaction() as tconn:
-                await tconn.execute(
-                    "UPDATE items SET quantity = ?, updated_at = CURRENT_TIMESTAMP "
-                    "WHERE id = ?",
-                    (new_qty, item_id),
-                )
-                await self._record_history(
-                    tconn, item_id, item["quantity"], new_qty, "consume"
-                )
-            location = f"{item['room']} / {item['cupboard']} / {item['shelf']}"
-            is_low = item["min_quantity"] is not None and new_qty <= item["min_quantity"]
-            return (
-                {
-                    "id": item["id"],
-                    "name": item["name"],
-                    "aliases": item["aliases"],
-                    "old_quantity": item["quantity"],
-                    "new_quantity": new_qty,
-                    "min_quantity": item["min_quantity"],
-                    "is_low_stock": is_low,
-                    "room": item["room"],
-                    "cupboard": item["cupboard"],
-                    "shelf": item["shelf"],
-                    "location": location,
-                },
-                None,
+    async def _consume_row(self, conn, item) -> tuple[dict[str, Any] | None, str | None]:
+        """Shared consume logic. Caller already holds the lock and passes the row."""
+        if not item:
+            return None, "Item not found"
+        if not item["track_quantity"]:
+            return None, "Item does not have quantity tracking enabled"
+        if item["quantity"] is None or item["quantity"] <= 0:
+            return None, "Item quantity is already 0 or not set"
+
+        new_qty = item["quantity"] - 1
+        item_id = item["id"]
+        # The decrement and its history row must land together.
+        async with self._transaction() as tconn:
+            await tconn.execute(
+                "UPDATE items SET quantity = ?, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?",
+                (new_qty, item_id),
             )
+            await self._record_history(
+                tconn, item_id, item["quantity"], new_qty, "consume"
+            )
+        location = f"{item['room']} / {item['cupboard']} / {item['shelf']}"
+        is_low = item["min_quantity"] is not None and new_qty <= item["min_quantity"]
+        return (
+            {
+                "id": item_id,
+                "name": item["name"],
+                "aliases": item["aliases"],
+                "old_quantity": item["quantity"],
+                "new_quantity": new_qty,
+                "min_quantity": item["min_quantity"],
+                "is_low_stock": is_low,
+                "room": item["room"],
+                "cupboard": item["cupboard"],
+                "shelf": item["shelf"],
+                "location": location,
+            },
+            None,
+        )
 
     async def low_stock_payload(self, item_id: int) -> dict[str, Any] | None:
         """Return the low-stock event payload for an item, or None if not low."""

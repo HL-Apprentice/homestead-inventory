@@ -56,6 +56,8 @@ export default function HistoryModal({
         </div>
         {ratesQuery.isLoading ? (
           <div className="text-sm text-ha-text/70">{t.history.loading}</div>
+        ) : ratesQuery.isError ? (
+          <div className="text-sm text-ha-error">{t.history.error}</div>
         ) : hasUsage ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label={t.history.perDay} value={rates!.daily_rate} />

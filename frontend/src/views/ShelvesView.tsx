@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Breadcrumb from '../components/Layout/BreadCrumb';
 import ShelvesHeader from '../components/Shelf/ShelvesHeader';
 import { useShelves } from '../hooks/shelves/useShelves';
@@ -25,10 +25,11 @@ export default function ShelvesView({ api }: { api: ApiService }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingShelf, setEditingShelf] = useState<Shelf | null>(null);
 
-  if (!selectedCupboard) {
-    goBack();
-    return null;
-  }
+  useEffect(() => {
+    if (!selectedCupboard) goBack();
+  }, [selectedCupboard, goBack]);
+
+  if (!selectedCupboard) return null;
 
   if (isLoading) return <div className="text-ha-text">{t.common.loading}</div>;
 

@@ -7,6 +7,7 @@ import json
 from aiohttp import web
 
 from ..const import DOMAIN
+from ..storage import images as img
 from .base import HInvView, json_error
 
 # Upper bound on an import payload. Home Assistant already caps request bodies,
@@ -66,5 +67,10 @@ class ImportView(HInvView):
                 return json_error(f"'{key}' must be a list")
 
         replace = bool(body.get("replace", False))
-        counts = await self.repo.import_data(data, replace=replace)
+        counts, orphaned_images = await self.repo.import_data(data, replace=replace)
+        # A replace wiped the old rows; remove their now-unreferenced image files.
+        for filename in orphaned_images:
+            await self.hass.async_add_executor_job(
+                img.delete_image_file, self.hass, filename
+            )
         return web.json_response({"imported": counts, "replace": replace})

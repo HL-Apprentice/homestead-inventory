@@ -46,7 +46,7 @@ async def test_import_replace_roundtrip(repo, repo_cls, tmp_path):
     fresh = repo_cls(str(tmp_path / "fresh.db"))
     await fresh.async_initialize()
     try:
-        counts = await fresh.import_data(data, replace=True)
+        counts, _ = await fresh.import_data(data, replace=True)
         assert counts["rooms"] == 1 and counts["items"] == 2
         out = await fresh.export_data()
         assert len(out["items"]) == 2
@@ -62,7 +62,7 @@ async def test_import_merge_is_idempotent(repo):
     await _seed(repo)
     data = await repo.export_data()
     # Re-importing the same data in merge mode must not duplicate anything.
-    counts = await repo.import_data(data, replace=False)
+    counts, _ = await repo.import_data(data, replace=False)
     assert counts == {"rooms": 0, "cupboards": 0, "shelves": 0,
                       "organizers": 0, "items": 0}
     out = await repo.export_data()
@@ -77,10 +77,25 @@ async def test_import_replace_wipes_existing(repo):
         "cupboards": [], "shelves": [], "organizers": [],
         "items": [],
     }
-    await repo.import_data(new_data, replace=True)
+    counts, _ = await repo.import_data(new_data, replace=True)
     out = await repo.export_data()
     assert [r["name"] for r in out["rooms"]] == ["Office"]
     assert out["items"] == []
+
+
+async def test_import_replace_returns_orphaned_images(repo):
+    await _seed(repo)
+    await repo.create_item(
+        "Kitchen", "Pantry", "Top", None,
+        {"name": "Jam", "image": "jam_abc.jpg", "track_quantity": False},
+    )
+    new_data = {"rooms": [{"name": "Office"}], "cupboards": [], "shelves": [],
+                "organizers": [], "items": []}
+    _, orphaned = await repo.import_data(new_data, replace=True)
+    assert "jam_abc.jpg" in orphaned
+    # A merge never orphans anything.
+    _, orphaned2 = await repo.import_data({"rooms": [{"name": "Office"}]}, replace=False)
+    assert orphaned2 == []
 
 
 async def test_import_merge_adds_new_to_existing(repo):
@@ -94,7 +109,7 @@ async def test_import_merge_adds_new_to_existing(repo):
                    "organizer": None, "name": "Flour", "quantity": 3,
                    "min_quantity": 1, "track_quantity": True}],
     }
-    counts = await repo.import_data(add, replace=False)
+    counts, _ = await repo.import_data(add, replace=False)
     assert counts["items"] == 1 and counts["rooms"] == 0
     out = await repo.export_data()
     assert sorted(i["name"] for i in out["items"]) == ["Flour", "Rice", "Salt"]
@@ -109,7 +124,7 @@ async def test_import_ignores_blank_and_bad_rows(repo):
         "items": [{"name": "Orphan", "room": "Nowhere", "cupboard": "X",
                    "shelf": "Y", "quantity": 1}],
     }
-    counts = await repo.import_data(data, replace=False)
+    counts, _ = await repo.import_data(data, replace=False)
     # The orphan item's path is auto-created (room/cupboard/shelf), item added.
     assert counts["items"] == 1
     out = await repo.export_data()

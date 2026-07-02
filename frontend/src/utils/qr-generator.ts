@@ -13,11 +13,21 @@ export function utf8ToBase64(str: string): string {
   return btoa(binary);
 }
 
-/** Inverse of utf8ToBase64 — decode a base64 payload back to a UTF-8 string. */
+/** Inverse of utf8ToBase64 — decode a base64 payload back to a string.
+ *
+ * New QR codes hold UTF-8 bytes. Legacy codes were plain `btoa(str)` of a
+ * Latin-1 string (which only failed for chars > 0xFF), so accented names like
+ * "Café" produced valid-but-non-UTF-8 bytes. Decoding UTF-8 strictly and
+ * falling back to the raw Latin-1 binary makes both old and new codes decode
+ * correctly. */
 export function base64ToUtf8(b64: string): string {
   const binary = atob(b64);
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return binary; // legacy Latin-1 payload
+  }
 }
 
 /**

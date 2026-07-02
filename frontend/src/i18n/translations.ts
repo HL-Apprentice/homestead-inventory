@@ -111,6 +111,7 @@ export interface Translations {
     notTracked: string;
     outOfStock: string;
     notFound: string;
+    useFailed: string;
   };
   backup: {
     title: string;
@@ -266,6 +267,7 @@ export const translations: Record<Language, Translations> = {
       notTracked: 'is not a tracked item.',
       outOfStock: 'is already at 0.',
       notFound: 'No item found for barcode',
+      useFailed: 'Could not update',
     },
     backup: {
       title: 'Backup & restore',

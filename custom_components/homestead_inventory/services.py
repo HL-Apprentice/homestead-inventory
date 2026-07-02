@@ -88,12 +88,8 @@ def async_register_services(hass: HomeAssistant) -> None:
 
     async def handle_consume_barcode(call: ServiceCall) -> None:
         repo = _repo(hass)
-        item = await repo.find_item_by_barcode(call.data["barcode"])
-        if item is None:
-            raise ServiceValidationError(
-                f"No item with barcode {call.data['barcode']!r}"
-            )
-        result, error = await repo.consume_item(item["id"])
+        # Atomic: resolves the barcode and decrements under one lock.
+        result, error = await repo.consume_item_by_barcode(call.data["barcode"])
         if error:
             raise ServiceValidationError(error)
         _fire_consume_events(hass, result)

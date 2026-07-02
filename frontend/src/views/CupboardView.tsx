@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCupboards } from '../hooks/cupboards/useCupboards';
 import { useHomesteadConfig } from '../hooks/global/useHomesteadConfig';
 import { useCupboardNavigation } from '../hooks/cupboards/useCupboardNavigation';
@@ -36,10 +36,13 @@ export default function CupboardsView({ api }: Props) {
 
   const { t } = useTranslation();
 
-  if (!selectedRoom) {
-    goBack();
-    return null;
-  }
+  // If we somehow landed here without a room (e.g. a stale URL), go back —
+  // but do it in an effect, never as a side effect during render.
+  useEffect(() => {
+    if (!selectedRoom) goBack();
+  }, [selectedRoom, goBack]);
+
+  if (!selectedRoom) return null;
 
   if (isLoading) return <div className="text-ha-text">{t.common.loading}</div>;
 

@@ -21,6 +21,24 @@ async def test_create_and_find_by_barcode(repo):
     assert await repo.find_item_by_barcode("nope") is None
 
 
+async def test_consume_by_barcode_atomic(repo):
+    await _seed_location(repo)
+    item_id = await repo.create_item(
+        "Kitchen", "Pantry", "Top", None,
+        {"name": "Rice", "barcode": "999", "quantity": 3, "min_quantity": 1,
+         "track_quantity": True},
+    )
+    result, error = await repo.consume_item_by_barcode("999")
+    assert error is None
+    assert result["id"] == item_id and result["new_quantity"] == 2
+    # History was recorded by the shared consume path.
+    hist = await repo.get_item_history(item_id)
+    assert len(hist) == 1 and hist[0]["delta"] == -1
+    # Unknown barcode is a clean error, not a crash.
+    result, error = await repo.consume_item_by_barcode("000")
+    assert result is None and error == "No item with that barcode"
+
+
 async def test_update_barcode(repo):
     await _seed_location(repo)
     item_id = await repo.create_item(
