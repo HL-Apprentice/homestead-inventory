@@ -50,7 +50,7 @@ export default function AllItemsView({ api }: Props) {
 
   const sortedItems = useMemo(() => {
     return [...displayedItems].sort((a, b) =>
-      a.name.localeCompare(b.name, 'ro')
+      a.name.localeCompare(b.name, 'en')
     );
   }, [displayedItems]);
 

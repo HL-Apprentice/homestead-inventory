@@ -31,6 +31,14 @@ export default function ScannerModal({
   const secure =
     typeof window !== 'undefined' && window.isSecureContext === true;
 
+  // Keep the latest onDetect in a ref so the camera effect can stay keyed on
+  // [isOpen, secure] (restarting the camera on every parent render would be
+  // wrong) while never calling a stale callback.
+  const onDetectRef = useRef(onDetect);
+  useEffect(() => {
+    onDetectRef.current = onDetect;
+  }, [onDetect]);
+
   useEffect(() => {
     if (!isOpen || !secure) return;
     const video = videoRef.current;
@@ -50,7 +58,7 @@ export default function ScannerModal({
         if (result) {
           stopped = true;
           c.stop();
-          onDetect(result.getText());
+          onDetectRef.current(result.getText());
         }
       })
       .then((c) => {

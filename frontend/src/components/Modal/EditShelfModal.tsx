@@ -94,10 +94,7 @@ export default function EditShelfModal({
           itemName={shelf.name}
           itemType={t.shelves.shelf.toLowerCase()}
           itemCount={shelf.itemCount}
-          onClose={() => {
-            onClose();
-            setShowDeleteModal(null);
-          }}
+          onClose={() => setShowDeleteModal(null)}
           onConfirm={async () => {
             await deleteShelf.mutateAsync(shelf.id);
             onClose();

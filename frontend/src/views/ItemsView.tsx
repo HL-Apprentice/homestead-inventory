@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFilteredItems, useGlobalItems } from '../hooks/items/useItems';
 import { useHomesteadConfig } from '../hooks/global/useHomesteadConfig';
 import { useItemActions } from '../hooks/items/useItemActions';
@@ -26,7 +26,7 @@ export default function ItemsView({ api }: { api: ApiService }) {
   });
 
   const sortedItems = useMemo(() => {
-    return [...items].sort((a, b) => a.name.localeCompare(b.name, 'ro'));
+    return [...items].sort((a, b) => a.name.localeCompare(b.name, 'en'));
   }, [items]);
 
   const { data: config } = useHomesteadConfig(api);
@@ -34,10 +34,11 @@ export default function ItemsView({ api }: { api: ApiService }) {
 
   const [showAddModal, setShowAddModal] = useState(false);
 
-  if (!selectedOrganizer) {
-    goBack();
-    return null;
-  }
+  useEffect(() => {
+    if (!selectedOrganizer) goBack();
+  }, [selectedOrganizer, goBack]);
+
+  if (!selectedOrganizer) return null;
 
   if (isLoading) return <div className="text-ha-text">Loading...</div>;
 

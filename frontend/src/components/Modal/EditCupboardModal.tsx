@@ -42,9 +42,15 @@ export default function EditCupboardModal({
 
   const handleSave = async () => {
     setLoading(true);
-    await onSave(name, file);
-    setLoading(false);
-    onClose();
+    try {
+      await onSave(name, file);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert(t.errors.generalError);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

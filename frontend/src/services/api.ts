@@ -1,4 +1,3 @@
-import { useTranslation } from '../i18n/I18nContext';
 import type {
   Hass,
   Room,
@@ -348,9 +347,9 @@ export class ApiService {
     });
 
     if (!response.ok) {
-      const { t } = useTranslation();
+      // NB: this is a plain class method, not a React component — no hooks here.
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || `${t.errors.uploadFailed}`);
+      throw new Error(error.error || 'Image upload failed');
     }
 
     const data = await response.json();

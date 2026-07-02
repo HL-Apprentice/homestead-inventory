@@ -26,6 +26,9 @@ export default function DeleteModal({
     setLoading(true);
     try {
       await onConfirm();
+    } catch (err) {
+      console.error(err);
+      alert(t.errors.generalError);
     } finally {
       setLoading(false);
     }

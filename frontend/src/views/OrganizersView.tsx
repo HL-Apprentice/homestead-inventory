@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOrganizers } from '../hooks/organizers/useOrganizers';
 import { useGlobalItems, useFilteredItems } from '../hooks/items/useItems';
 import { useHomesteadConfig } from '../hooks/global/useHomesteadConfig';
@@ -54,17 +54,18 @@ export default function OrganizersView({ api }: { api: ApiService }) {
   const itemsWithoutOrganizer = directItems.length;
 
   const sortedOrganizers = useMemo(() => {
-    return [...organizers].sort((a, b) => a.name.localeCompare(b.name, 'ro'));
+    return [...organizers].sort((a, b) => a.name.localeCompare(b.name, 'en'));
   }, [organizers]);
 
   const sortedDirectItems = useMemo(() => {
-    return [...directItems].sort((a, b) => a.name.localeCompare(b.name, 'ro'));
+    return [...directItems].sort((a, b) => a.name.localeCompare(b.name, 'en'));
   }, [directItems]);
 
-  if (!selectedShelf) {
-    goBack();
-    return null;
-  }
+  useEffect(() => {
+    if (!selectedShelf) goBack();
+  }, [selectedShelf, goBack]);
+
+  if (!selectedShelf) return null;
 
   if (organizersLoading || itemsLoading) {
     return <div className="text-ha-text">Loading...</div>;
