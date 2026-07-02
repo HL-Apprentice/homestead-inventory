@@ -48,9 +48,14 @@ export default function RoomsView({ api }: { api: ApiService }) {
       alert(`"${item.name}" ${t.scan.outOfStock}`);
       return;
     }
-    const res = await api.consumeItem(item.id);
-    await queryClient.invalidateQueries();
-    alert(`${t.scan.usedOne} "${res.name}" — ${res.new_quantity} left.`);
+    // The item was found; a failure here is an action failure, not "not found".
+    try {
+      const res = await api.consumeItem(item.id);
+      await queryClient.invalidateQueries();
+      alert(`${t.scan.usedOne} "${res.name}" — ${res.new_quantity} left.`);
+    } catch {
+      alert(`${t.scan.useFailed} "${item.name}".`);
+    }
   };
 
   const handleDetect = async (code: string) => {

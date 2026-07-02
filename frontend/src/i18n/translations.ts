@@ -111,6 +111,7 @@ export interface Translations {
     notTracked: string;
     outOfStock: string;
     notFound: string;
+    useFailed: string;
   };
   backup: {
     title: string;
@@ -151,6 +152,7 @@ export interface Translations {
     sameLocationItem: string;
     preloadMoveLocation: string;
     getRoomsError: string;
+    qrFailed: string;
   };
 }
 
@@ -265,6 +267,7 @@ export const translations: Record<Language, Translations> = {
       notTracked: 'is not a tracked item.',
       outOfStock: 'is already at 0.',
       notFound: 'No item found for barcode',
+      useFailed: 'Could not update',
     },
     backup: {
       title: 'Backup & restore',
@@ -307,6 +310,7 @@ export const translations: Record<Language, Translations> = {
       sameLocationItem: 'The item is in the same location',
       preloadMoveLocation: 'Error at preloaded current location',
       getRoomsError: 'Error at fetching rooms.',
+      qrFailed: 'Could not create the QR code. Please try again.',
     },
   },
 };

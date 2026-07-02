@@ -217,28 +217,6 @@ class ConsumeView(HInvView):
         return web.json_response(result)
 
 
-class ItemDeepLinkView(HInvView):
-    url = f"/api/{DOMAIN}/items/{{item_id}}/consume_link"
-    name = f"api:{DOMAIN}:item_consume_link"
-
-    async def get(self, request, item_id):
-        deep_link = f"homeassistant://navigate/{DOMAIN}/consume/{item_id}"
-        return web.json_response(
-            {
-                "deep_link": deep_link,
-                "webhook_url": f"{self._base_url()}/api/{DOMAIN}/consume/{item_id}",
-                "item_id": item_id,
-            }
-        )
-
-    def _base_url(self) -> str:
-        cfg = self.hass.config
-        if getattr(cfg, "external_url", None):
-            return cfg.external_url
-        if getattr(cfg, "internal_url", None):
-            return cfg.internal_url
-        return f"http://{cfg.api.local_ip}:8123"
-
 
 class ConfigView(HInvView):
     url = f"/api/{DOMAIN}/config"
