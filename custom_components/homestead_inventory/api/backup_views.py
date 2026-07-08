@@ -35,6 +35,9 @@ class ImportView(HInvView):
     containers/items are reused, not duplicated).
     """
 
+    # Import (especially replace=true) can wipe the whole inventory, so it
+    # always requires an admin — independent of the require_admin option.
+    admin_verbs = ("post",)
     url = f"/api/{DOMAIN}/import"
     name = f"api:{DOMAIN}:import"
 

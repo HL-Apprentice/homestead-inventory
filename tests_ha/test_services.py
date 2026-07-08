@@ -1,6 +1,7 @@
 """Service registration + behaviour, booted in real HA."""
 
 import pytest
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.homestead_inventory.const import DOMAIN
@@ -25,6 +26,55 @@ async def _seed_item(hass, qty=5, barcode=None):
         {"name": "Rice", "barcode": barcode, "quantity": qty,
          "min_quantity": 1, "track_quantity": True},
     )
+
+
+async def _setup_admin(hass):
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={"require_admin": True},
+                            unique_id=DOMAIN, title="Homestead Inventory")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+async def test_service_admin_gate_blocks_non_admin(hass, hass_read_only_user):
+    from homeassistant.core import Context
+    from homeassistant.exceptions import Unauthorized
+
+    await _setup_admin(hass)
+    item_id = await _seed_item(hass, qty=5)
+    with pytest.raises(Unauthorized):
+        await hass.services.async_call(
+            DOMAIN, "consume", {"item_id": item_id},
+            blocking=True, context=Context(user_id=hass_read_only_user.id),
+        )
+    # Not consumed.
+    repo = hass.data[DOMAIN]["repository"]
+    assert (await repo.list_all_items())[0]["quantity"] == 5
+
+
+async def test_service_admin_gate_allows_system_context(hass):
+    # No user context (automation/system) is trusted even with require_admin on.
+    await _setup_admin(hass)
+    item_id = await _seed_item(hass, qty=5)
+    await hass.services.async_call(
+        DOMAIN, "consume", {"item_id": item_id}, blocking=True
+    )
+    repo = hass.data[DOMAIN]["repository"]
+    assert (await repo.list_all_items())[0]["quantity"] == 4
+
+
+async def test_service_gate_off_allows_non_admin(hass, hass_read_only_user):
+    from homeassistant.core import Context
+
+    await _setup(hass)  # require_admin off
+    item_id = await _seed_item(hass, qty=5)
+    await hass.services.async_call(
+        DOMAIN, "consume", {"item_id": item_id}, blocking=True,
+        context=Context(user_id=hass_read_only_user.id),
+    )
+    repo = hass.data[DOMAIN]["repository"]
+    assert (await repo.list_all_items())[0]["quantity"] == 4
 
 
 async def test_services_registered(hass):
@@ -94,6 +144,31 @@ async def test_low_stock_to_todo_service(hass):
     assert len(calls) == 1
     assert "Rice" in calls[0]["item"]
     assert calls[0]["entity_id"] == "todo.shopping_list"
+
+
+async def test_low_stock_to_todo_total_failure_raises(hass):
+    # If adding to the to-do list fails for every item (e.g. no such list), the
+    # service reports a clean error instead of an unhandled exception.
+    await _setup(hass)
+    await _seed_item(hass, qty=1)  # low stock
+
+    async def _boom(call):
+        raise HomeAssistantError("no such to-do list")
+
+    hass.services.async_register("todo", "add_item", _boom)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "low_stock_to_todo",
+            {"todo_list": "todo.nope"}, blocking=True,
+        )
+
+
+async def test_low_stock_to_todo_no_items_is_noop(hass):
+    # No low-stock items -> nothing to add, no error even if the list is bogus.
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN, "low_stock_to_todo", {"todo_list": "todo.nope"}, blocking=True
+    )
 
 
 async def test_services_removed_on_unload(hass):

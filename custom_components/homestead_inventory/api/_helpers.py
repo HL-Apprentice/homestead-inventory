@@ -8,6 +8,7 @@ harness (they only need aiohttp). ``base.py`` re-exports these names.
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import sqlite3
 
@@ -61,8 +62,10 @@ def guard_db(handler):
 
     Validation errors are returned as values (not raised) and pass through;
     HTTPExceptions (e.g. the 503 from a missing repository) re-raise unchanged;
-    sqlite3.IntegrityError is handled inside the create/patch handlers, so only
-    genuinely unexpected DB errors (disk full, locked, corruption) land here.
+    a malformed/empty request body (``request.json()`` raising JSONDecodeError)
+    becomes a clean 400; sqlite3.IntegrityError is handled inside the create/patch
+    handlers, so only genuinely unexpected DB errors (disk full, locked,
+    corruption) land in the sqlite branch.
     """
 
     @functools.wraps(handler)
@@ -71,6 +74,8 @@ def guard_db(handler):
             return await handler(self, *args, **kwargs)
         except web.HTTPException:
             raise
+        except json.JSONDecodeError:
+            return json_error("Invalid or missing JSON body")
         except sqlite3.Error as err:
             _LOGGER.error(
                 "Database error in %s: %s",

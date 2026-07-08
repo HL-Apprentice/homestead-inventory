@@ -43,6 +43,16 @@ def _as_int_or_none(value: Any) -> int | None:
     return None if value is None else int(value)
 
 
+def _lenient_int(value: Any) -> int | None:
+    """Like _as_int_or_none but tolerant — a bad value becomes None instead of
+    raising. Used for best-effort import of untrusted backup JSON so one bad
+    quantity can't 500 the whole restore."""
+    try:
+        return None if value is None else int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class InventoryRepository:
     """Async SQLite repository for the room/cupboard/shelf/organizer/item tree."""
 
@@ -872,8 +882,13 @@ class InventoryRepository:
                     await t.execute("DELETE FROM rooms")  # FK cascade clears all
 
                 async def _scalar(sql: str, params: tuple) -> int | None:
+                    # Called many times per import — close each cursor so a large
+                    # restore doesn't hold a pile of live cursors on the connection.
                     cur = await t.execute(sql, params)
-                    row = await cur.fetchone()
+                    try:
+                        row = await cur.fetchone()
+                    finally:
+                        await cur.close()
                     return row[0] if row else None
 
                 async def room_id(name: str) -> int | None:
@@ -990,8 +1005,8 @@ class InventoryRepository:
                             (it.get("image") or ""),
                             sid,
                             oid,
-                            _as_int_or_none(it.get("quantity")),
-                            _as_int_or_none(it.get("min_quantity")),
+                            _lenient_int(it.get("quantity")),
+                            _lenient_int(it.get("min_quantity")),
                             1 if it.get("track_quantity") else 0,
                         ),
                     )

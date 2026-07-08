@@ -105,6 +105,7 @@ class AllItemsView(HInvView):
 
 
 class ItemView(HInvView):
+    admin_verbs = ("delete",)  # deleting an item is destructive
     url = f"/api/{DOMAIN}/items/{{item_id}}"
     name = f"api:{DOMAIN}:item"
 
@@ -268,6 +269,7 @@ class BarcodeLookupView(HInvView):
     outbound call). Barcodes are validated as numeric to keep the request safe.
     """
 
+    admin_verbs = ("get",)  # outbound network call -> admin only
     url = f"/api/{DOMAIN}/barcode_lookup"
     name = f"api:{DOMAIN}:barcode_lookup"
 

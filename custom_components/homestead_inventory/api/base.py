@@ -49,6 +49,36 @@ def _admin_gate(handler):
     return wrapper
 
 
+def _structure_gate(handler):
+    """Reject structure-mutating verbs (POST/PATCH/DELETE on rooms/cupboards/
+    shelves/organizers) when the ``allow_structure_modification`` option is off.
+    Previously the option was only respected by the UI, so a direct API call
+    could still alter the tree; this enforces it server-side."""
+
+    @functools.wraps(handler)
+    async def wrapper(self, request, *args, **kwargs):
+        if not self._structure_mod_enabled():
+            return json_error("Structure modification is disabled", 403)
+        return await handler(self, request, *args, **kwargs)
+
+    return wrapper
+
+
+def _unconditional_admin(handler):
+    """Require an admin regardless of the ``require_admin`` option. Applied to
+    genuinely dangerous verbs — destructive deletes, file writes (upload), the
+    bulk import/restore, and the outbound barcode lookup — so a non-admin can
+    never trigger them even in the default (require_admin off) household setup."""
+
+    @functools.wraps(handler)
+    async def wrapper(self, request, *args, **kwargs):
+        if not _is_admin(request):
+            return json_error("Admin privileges required", 403)
+        return await handler(self, request, *args, **kwargs)
+
+    return wrapper
+
+
 class HInvView(HomeAssistantView):
     """Base view: authenticated; resolves the repository dynamically.
 
@@ -64,12 +94,26 @@ class HInvView(HomeAssistantView):
 
     requires_auth = True
 
+    # Subclasses whose POST/PATCH/DELETE mutate the container tree set this so
+    # the ``allow_structure_modification`` option is enforced server-side.
+    structure_mutation = False
+    # Verbs that always require an admin, independent of the require_admin
+    # option (destructive/file-write/outbound operations).
+    admin_verbs: tuple[str, ...] = ()
+
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
+        structure = getattr(cls, "structure_mutation", False)
+        admin_verbs = getattr(cls, "admin_verbs", ())
         for verb in ("get", "post", "put", "patch", "delete"):
             handler = cls.__dict__.get(verb)
             if callable(handler) and not getattr(handler, "_hinv_wrapped", False):
-                wrapped = _admin_gate(guard_db(handler))
+                inner = guard_db(handler)
+                if structure and verb in ("post", "put", "patch", "delete"):
+                    inner = _structure_gate(inner)
+                if verb in admin_verbs:
+                    inner = _unconditional_admin(inner)
+                wrapped = _admin_gate(inner)
                 wrapped._hinv_wrapped = True
                 setattr(cls, verb, wrapped)
 
@@ -79,6 +123,16 @@ class HInvView(HomeAssistantView):
     def _admin_required(self) -> bool:
         entry = self.hass.data.get(DOMAIN, {}).get("entry")
         return bool(entry and entry.options.get("require_admin", False))
+
+    def _structure_mod_enabled(self) -> bool:
+        entry = self.hass.data.get(DOMAIN, {}).get("entry")
+        return not entry or entry.options.get("allow_structure_modification", True)
+
+    @staticmethod
+    def is_admin(request: web.Request) -> bool:
+        """Whether the authenticated caller is an admin (independent of the
+        require_admin option) — used to gate genuinely destructive operations."""
+        return _is_admin(request)
 
     @property
     def repo(self) -> InventoryRepository:

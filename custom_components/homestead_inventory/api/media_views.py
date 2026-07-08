@@ -20,6 +20,7 @@ _VALID_IMAGE_NAME = re.compile(r"^[a-z0-9_-]+\.jpg$")
 
 
 class UploadView(HInvView):
+    admin_verbs = ("post",)  # writes a file to disk -> admin only
     url = f"/api/{DOMAIN}/upload"
     name = f"api:{DOMAIN}:upload"
 
