@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.2] - 2026-07-02
+
+### Security & stability
+A multi-round, four-model security + stability review (Claude + Grok + Gemini +
+a local Qwen learner) surfaced and fixed:
+- **Path traversal (Windows):** image deletion now validates filenames against a
+  strict allowlist (matching how they're served) instead of an ad-hoc blocklist,
+  closing an arbitrary-file-delete vector on Windows hosts.
+- **Authorization:** the four services (`consume`, `consume_barcode`,
+  `set_quantity`, `low_stock_to_todo`) now honor the **`require_admin`** option;
+  the **`allow_structure_modification`** option is now enforced server-side (not
+  just in the UI); and the dangerous operations — **deletes, image upload,
+  backup import, and the outbound barcode lookup** — always require an admin,
+  regardless of the toggle. Everyday actions (adding items, adjusting/consuming
+  quantities) and automations/scripts (system context) are unaffected.
+- **Crash-safety:** a malformed/empty request body returns a clean `400` instead
+  of an unhandled `500`; importing a backup with a bad quantity is tolerated; and
+  the low-stock-to-todo service reports a clean error instead of throwing if the
+  target to-do list is unavailable.
+
+No schema change; upgrading from v0.4.1 is seamless.
+
 ## [0.4.1] - 2026-07-02
 
 ### Fixed
@@ -81,6 +103,7 @@ convergence) found and fixed a batch of frontend + robustness bugs:
   schema versioning), signed/expiring image URLs, optional admin-only access.
 - 100% local by default; English-only UI.
 
+[0.4.2]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.4.2
 [0.4.1]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.4.1
 [0.4.0]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.4.0
 [0.3.0]: https://github.com/HL-Apprentice/homestead-inventory/releases/tag/v0.3.0

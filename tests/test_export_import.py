@@ -115,6 +115,25 @@ async def test_import_merge_adds_new_to_existing(repo):
     assert sorted(i["name"] for i in out["items"]) == ["Flour", "Rice", "Salt"]
 
 
+async def test_import_tolerates_bad_quantity(repo):
+    # A crafted/tampered backup with a non-numeric quantity must not crash the
+    # import (it should coerce to None), not raise a 500.
+    data = {
+        "rooms": [{"name": "Kitchen"}],
+        "cupboards": [{"room": "Kitchen", "name": "Pantry", "image": ""}],
+        "shelves": [{"room": "Kitchen", "cupboard": "Pantry", "name": "Top"}],
+        "organizers": [],
+        "items": [{"room": "Kitchen", "cupboard": "Pantry", "shelf": "Top",
+                   "name": "Rice", "quantity": "abc", "min_quantity": [1, 2],
+                   "track_quantity": True}],
+    }
+    counts, _ = await repo.import_data(data, replace=False)
+    assert counts["items"] == 1
+    out = await repo.export_data()
+    rice = next(i for i in out["items"] if i["name"] == "Rice")
+    assert rice["quantity"] is None and rice["min_quantity"] is None
+
+
 async def test_import_ignores_blank_and_bad_rows(repo):
     data = {
         "rooms": [{"name": ""}, {"name": "  "}],

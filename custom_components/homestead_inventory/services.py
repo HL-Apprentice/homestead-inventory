@@ -13,7 +13,11 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import (
+    HomeAssistantError,
+    ServiceValidationError,
+    Unauthorized,
+)
 from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, EVENT_ITEM_CONSUMED, EVENT_LOW_STOCK
@@ -45,6 +49,23 @@ def _repo(hass: HomeAssistant):
     if repo is None:
         raise HomeAssistantError("Homestead Inventory is not set up")
     return repo
+
+
+async def _guard_admin(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Mirror the HTTP admin gate: when the ``require_admin`` option is on, a
+    non-admin USER who calls one of these mutating services is rejected — so the
+    gate can't be bypassed via Developer Tools > Services. Calls with no user
+    context (automations/scripts, set up by an admin) are trusted and allowed.
+    """
+    entry = hass.data.get(DOMAIN, {}).get("entry")
+    if not (entry and entry.options.get("require_admin", False)):
+        return
+    user_id = call.context.user_id
+    if user_id is None:
+        return  # system / automation context
+    user = await hass.auth.async_get_user(user_id)
+    if user is None or not user.is_admin:
+        raise Unauthorized(context=call.context)
 
 
 def _fire_consume_events(hass: HomeAssistant, result: dict[str, Any]) -> None:
@@ -80,6 +101,7 @@ def async_register_services(hass: HomeAssistant) -> None:
     """Register all services (idempotent — safe to call once per process)."""
 
     async def handle_consume(call: ServiceCall) -> None:
+        await _guard_admin(hass, call)
         repo = _repo(hass)
         result, error = await repo.consume_item(call.data["item_id"])
         if error:
@@ -87,6 +109,7 @@ def async_register_services(hass: HomeAssistant) -> None:
         _fire_consume_events(hass, result)
 
     async def handle_consume_barcode(call: ServiceCall) -> None:
+        await _guard_admin(hass, call)
         repo = _repo(hass)
         # Atomic: resolves the barcode and decrements under one lock.
         result, error = await repo.consume_item_by_barcode(call.data["barcode"])
@@ -95,6 +118,7 @@ def async_register_services(hass: HomeAssistant) -> None:
         _fire_consume_events(hass, result)
 
     async def handle_set_quantity(call: ServiceCall) -> None:
+        await _guard_admin(hass, call)
         repo = _repo(hass)
         count = await repo.update_item_quantity(
             call.data["item_id"], quantity=call.data["quantity"]
@@ -106,20 +130,36 @@ def async_register_services(hass: HomeAssistant) -> None:
             hass.bus.async_fire(EVENT_LOW_STOCK, payload)
 
     async def handle_low_stock_to_todo(call: ServiceCall) -> None:
+        await _guard_admin(hass, call)
         repo = _repo(hass)
         items = await repo.low_stock_items()
+        todo_list = call.data["todo_list"]
+        failures = 0
         for it in items:
-            await hass.services.async_call(
-                "todo",
-                "add_item",
-                {
-                    "entity_id": call.data["todo_list"],
-                    "item": f"{it['name']} ({it['location']})",
-                },
-                blocking=True,
+            try:
+                await hass.services.async_call(
+                    "todo",
+                    "add_item",
+                    {
+                        "entity_id": todo_list,
+                        "item": f"{it['name']} ({it['location']})",
+                    },
+                    blocking=True,
+                )
+            except Exception as err:  # noqa: BLE001 - keep going, report at the end
+                failures += 1
+                _LOGGER.warning(
+                    "Could not add %s to %s: %s", it["name"], todo_list, err
+                )
+        _LOGGER.debug(
+            "Added %d/%d low-stock item(s) to %s",
+            len(items) - failures, len(items), todo_list,
+        )
+        # Only a total failure (e.g. the to-do list doesn't exist) is an error.
+        if items and failures == len(items):
+            raise ServiceValidationError(
+                f"Could not add items to {todo_list}"
             )
-        _LOGGER.debug("Added %d low-stock item(s) to %s", len(items),
-                      call.data["todo_list"])
 
     hass.services.async_register(
         DOMAIN, SERVICE_CONSUME, handle_consume, schema=_CONSUME_SCHEMA

@@ -23,6 +23,8 @@ async def _delete_images(hass, refs) -> None:
 # Rooms
 # --------------------------------------------------------------------------- #
 class RoomsView(HInvView):
+    structure_mutation = True
+    admin_verbs = ("delete",)
     url = f"/api/{DOMAIN}/rooms"
     name = f"api:{DOMAIN}:rooms"
 
@@ -75,6 +77,8 @@ class RoomsView(HInvView):
 # Cupboards
 # --------------------------------------------------------------------------- #
 class CupboardsView(HInvView):
+    structure_mutation = True
+    admin_verbs = ("delete",)
     url = f"/api/{DOMAIN}/cupboards"
     name = f"api:{DOMAIN}:cupboards"
 
@@ -136,6 +140,8 @@ class CupboardsView(HInvView):
 # Shelves
 # --------------------------------------------------------------------------- #
 class ShelvesView(HInvView):
+    structure_mutation = True
+    admin_verbs = ("delete",)
     url = f"/api/{DOMAIN}/shelves"
     name = f"api:{DOMAIN}:shelves"
 
@@ -196,6 +202,8 @@ class ShelvesView(HInvView):
 # Organizers
 # --------------------------------------------------------------------------- #
 class OrganizersView(HInvView):
+    structure_mutation = True
+    admin_verbs = ("delete",)
     url = f"/api/{DOMAIN}/organizers"
     name = f"api:{DOMAIN}:organizers"
 

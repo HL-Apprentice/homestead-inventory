@@ -10,12 +10,15 @@ from custom_components.homestead_inventory.const import DOMAIN
 BASE = f"/api/{DOMAIN}"
 
 
-async def _setup(hass, require_admin=False, enable_barcode_lookup=False):
+async def _setup(hass, require_admin=False, enable_barcode_lookup=False,
+                 allow_structure_modification=True):
     options = {}
     if require_admin:
         options["require_admin"] = True
     if enable_barcode_lookup:
         options["enable_barcode_lookup"] = True
+    if not allow_structure_modification:
+        options["allow_structure_modification"] = False
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={},
@@ -46,6 +49,106 @@ async def test_create_and_list_room(hass, hass_client):
     assert resp.status == 200
     rooms = await resp.json()
     assert any(r["name"] == "Kitchen" for r in rooms)
+
+
+async def test_delete_image_file_rejects_bad_names(hass):
+    # delete_image_file must only ever remove files matching the managed
+    # allowlist — never a traversal / Windows / non-jpg reference.
+    import os
+
+    from custom_components.homestead_inventory.storage import images as img
+
+    d = img.images_dir(hass)
+    path = os.path.join(d, "good_abcdef12.jpg")
+    with open(path, "wb") as fh:
+        fh.write(b"x")
+
+    for bad in [
+        "..\\good_abcdef12.jpg",   # Windows parent traversal
+        "C:\\good_abcdef12.jpg",   # Windows drive/absolute
+        "sub/good_abcdef12.jpg",   # subdir
+        "good_abcdef12.png",       # wrong extension
+        "../x",
+    ]:
+        img.delete_image_file(hass, bad)  # no-op, no exception
+    assert os.path.exists(path)  # the real file survived every bad ref
+
+    img.delete_image_file(hass, "good_abcdef12.jpg")  # valid managed name
+    assert not os.path.exists(path)
+
+
+async def test_structure_mod_disabled_blocks_mutations(hass, hass_client):
+    await _setup(hass, allow_structure_modification=False)
+    client = await hass_client()
+    # Mutating the tree is rejected server-side (not just hidden in the UI).
+    resp = await client.post(f"{BASE}/rooms", json={"name": "Kitchen"})
+    assert resp.status == 403
+    # Reads still work.
+    resp = await client.get(f"{BASE}/rooms")
+    assert resp.status == 200
+
+
+async def test_import_requires_admin(hass, hass_client, hass_read_only_access_token):
+    # Import can wipe everything, so it always needs admin even with the
+    # require_admin option off.
+    await _setup(hass)  # require_admin off
+    client = await hass_client(hass_read_only_access_token)  # non-admin token
+    resp = await client.post(f"{BASE}/import", json={"data": {}, "replace": False})
+    assert resp.status == 403
+
+
+async def test_import_allowed_for_admin(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()  # default client is admin
+    resp = await client.post(f"{BASE}/import", json={"data": {}, "replace": False})
+    assert resp.status == 200
+
+
+async def test_delete_requires_admin(hass, hass_client, hass_read_only_access_token):
+    # Destructive deletes always require admin, even with require_admin off.
+    await _setup(hass)
+    admin = await hass_client()
+    await admin.post(f"{BASE}/rooms", json={"name": "Kitchen"})
+    rid = (await (await admin.get(f"{BASE}/rooms")).json())[0]["id"]
+
+    nonadmin = await hass_client(hass_read_only_access_token)
+    resp = await nonadmin.delete(f"{BASE}/rooms", json={"id": rid})
+    assert resp.status == 403
+    # An admin still can.
+    resp = await admin.delete(f"{BASE}/rooms", json={"id": rid})
+    assert resp.status == 200
+
+
+async def test_upload_requires_admin(hass, hass_client, hass_read_only_access_token):
+    # File-write always requires admin.
+    await _setup(hass)
+    nonadmin = await hass_client(hass_read_only_access_token)
+    resp = await nonadmin.post(f"{BASE}/upload")
+    assert resp.status == 403
+
+
+async def test_barcode_lookup_requires_admin(
+    hass, hass_client, hass_read_only_access_token
+):
+    # Outbound lookup always requires admin.
+    await _setup(hass, enable_barcode_lookup=True)
+    nonadmin = await hass_client(hass_read_only_access_token)
+    resp = await nonadmin.get(f"{BASE}/barcode_lookup?code=123")
+    assert resp.status == 403
+
+
+async def test_malformed_json_body_returns_400(hass, hass_client):
+    await _setup(hass)
+    client = await hass_client()
+    # A non-JSON body must be a clean 400, not an unhandled 500.
+    resp = await client.post(
+        f"{BASE}/rooms", data="not json",
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status == 400
+    # Empty body too.
+    resp = await client.post(f"{BASE}/cupboards", data="")
+    assert resp.status == 400
 
 
 async def test_name_length_capped(hass, hass_client):

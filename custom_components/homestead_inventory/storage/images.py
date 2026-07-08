@@ -35,6 +35,12 @@ MAX_WIDTH = 1600
 MAX_HEIGHT = 1200
 JPEG_QUALITY = 85
 
+# Every image this integration stores is `sanitize_filename()` output + a uuid +
+# ".jpg", i.e. matches this pattern. Validating against it (rather than only
+# blocking "../" and "/") also rejects Windows separators ("\") and drive letters
+# (":") — so a crafted image reference can never escape the images directory.
+_VALID_IMAGE_NAME = re.compile(r"^[a-z0-9_-]+\.jpg$")
+
 _DIACRITICS = {
     "ă": "a", "â": "a", "î": "i", "ș": "s", "ț": "t",
     "Ă": "A", "Â": "A", "Î": "I", "Ș": "S", "Ț": "T",
@@ -122,7 +128,7 @@ def _bare_filename(image_ref: str) -> str | None:
 def delete_image_file(hass: HomeAssistant, image_ref: str) -> None:
     """Remove an image file from disk. Tolerant of missing files. Blocking."""
     name = _bare_filename(image_ref)
-    if not name or ".." in name or "/" in name:
+    if not name or not _VALID_IMAGE_NAME.match(name):
         return
     full = os.path.join(images_dir(hass), name)
     try:
